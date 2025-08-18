@@ -1,0 +1,82 @@
+# -----------------
+# Python
+# -----------------
+__pycache__/
+*.py[cod]
+*.pyo
+*.pyd
+*.so
+*.egg
+*.egg-info/
+.eggs/
+dist/
+build/
+*.manifest
+*.spec
+
+# Virtual environments
+.venv/
+venv/
+ENV/
+env/
+env.bak/
+pip-wheel-metadata/
+
+# Byte-compiled
+*.pyc
+*.pkl
+
+# -----------------
+# FastAPI / Uvicorn / Logs
+# -----------------
+*.log
+*.db
+*.sqlite3
+*.sqlite
+*.pid
+*.gz
+
+# -----------------
+# Testing
+# -----------------
+.coverage
+htmlcov/
+.tox/
+.nox/
+.pytest_cache/
+.mypy_cache/
+.dmypy.json
+.pyre/
+
+# -----------------
+# IDE / Editors
+# -----------------
+.vscode/
+.idea/
+*.iml
+*.sublime-project
+*.sublime-workspace
+
+# -----------------
+# OS files
+# -----------------
+.DS_Store
+Thumbs.db
+
+# -----------------
+# Docker
+# -----------------
+*.pid
+*.seed
+*.bak
+docker-compose.override.yml
+
+# -----------------
+# Envs / Secrets
+# -----------------
+.env
+.env.*
+*.pem
+*.key
+*.crt
+*.cert

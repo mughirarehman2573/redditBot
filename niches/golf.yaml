@@ -1,0 +1,18 @@
+name: golf
+subreddits: [golf, golfswing]
+comment_style:
+  max_sentences: 2
+  forbid_links: true
+  tone: casual-friendly
+prompts:
+  - >
+    Write a short, specific, human-sounding reply to the Reddit post.
+    Be encouraging and mention one concrete detail from the title/body.
+    No links. No product mentions. 1–2 sentences max.
+filters:
+  min_score: 0
+  max_post_age_minutes: 2880
+posting:
+  max_comments_per_day: 8
+  min_gap_minutes: "20-60"
+review_mode: approve_in_ui

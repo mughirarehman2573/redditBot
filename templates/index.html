@@ -1,0 +1,122 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <title>Reddit MVP Now</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+</head>
+<body class="bg-gray-50 text-gray-800">
+  <div class="max-w-6xl mx-auto p-6">
+
+    <!-- Header -->
+    <header class="flex justify-between items-center mb-6">
+      <h1 class="text-2xl font-bold">Reddit MVP Now</h1>
+      <div class="text-sm text-gray-500">
+        Planned: {{ planned|length }} | Posted: {{ posted_count }} | Errors: {{ error_count }}
+      </div>
+    </header>
+
+    <!-- Add Account & Email Summary -->
+    <div class="grid grid-cols-1 md:grid-cols-2 gap-6 mb-8">
+      <form method="post" action="/api/accounts" class="bg-white p-4 rounded-xl shadow">
+        <h2 class="font-semibold mb-2">➕ Add Account</h2>
+        <input class="border p-2 w-full mb-2" name="label" placeholder="Label" required>
+        <input class="border p-2 w-full mb-2" name="username" placeholder="Reddit username" required>
+        <input class="border p-2 w-full mb-2" name="refresh_token" placeholder="Refresh token" required>
+        <input class="border p-2 w-full mb-2" name="client_id" placeholder="Client ID (optional)">
+        <input class="border p-2 w-full mb-2" name="client_secret" placeholder="Client Secret (optional)">
+        <button type="submit" class="bg-blue-600 text-white px-4 py-2 rounded">Save</button>
+      </form>
+
+      <form method="post" action="/api/send-summary" class="bg-white p-4 rounded-xl shadow">
+        <h2 class="font-semibold mb-2">📧 Email Summary</h2>
+        <input type="number" name="limit" value="5" min="1" max="20" class="border p-2 w-full mb-2">
+        <button type="submit" class="bg-green-600 text-white px-4 py-2 rounded">Send</button>
+      </form>
+    </div>
+
+    <!-- Accounts -->
+    <section class="mb-8">
+      <h2 class="text-xl font-semibold mb-2">Accounts</h2>
+      <table class="w-full bg-white rounded-xl shadow overflow-hidden">
+        <thead class="bg-gray-100">
+          <tr>
+            <th class="p-2 text-left">Label</th>
+            <th class="p-2 text-left">User</th>
+            <th class="p-2 text-left">Niche</th>
+            <th class="p-2 text-left">Actions</th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for a in accounts %}
+          <tr class="border-t">
+            <td class="p-2">{{ a.label }}</td>
+            <td class="p-2">{{ a.username }}</td>
+            <td class="p-2">
+              <form method="post" action="/api/accounts/{{a.id}}/niche" class="flex gap-2">
+                <select name="niche" class="border p-1 rounded">
+                  {% for n in ["golf","fitness","wellness"] %}
+                  <option value="{{n}}" {% if a.active_niche==n %}selected{% endif %}>{{n}}</option>
+                  {% endfor %}
+                </select>
+                <button type="submit" class="bg-blue-500 text-white px-2 rounded">Set</button>
+              </form>
+            </td>
+            <td class="p-2">
+              <form method="post" action="/api/plan-run" class="flex gap-2">
+                <input type="hidden" name="account_id" value="{{a.id}}">
+                <input type="number" name="max_new" value="3" min="1" max="10" class="border p-1 w-16 rounded">
+                <button type="submit" class="bg-purple-500 text-white px-2 rounded">Plan</button>
+              </form>
+            </td>
+          </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </section>
+
+    <!-- Planned Comments -->
+    <section class="mb-8">
+      <h2 class="text-xl font-semibold mb-2">Planned Comments</h2>
+      <table class="w-full bg-white rounded-xl shadow overflow-hidden">
+        <thead class="bg-gray-100">
+          <tr>
+            <th class="p-2">Subreddit</th>
+            <th class="p-2">Title</th>
+            <th class="p-2">Text</th>
+            <th class="p-2">Link</th>
+            <th class="p-2">Actions</th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for p in planned %}
+          <tr class="border-t">
+            <td class="p-2">r/{{p.subreddit}}</td>
+            <td class="p-2">{{p.post_title}}</td>
+            <td class="p-2">{{p.text}}</td>
+            <td class="p-2"><a href="{{p.post_url}}" class="text-blue-600" target="_blank">Open</a></td>
+            <td class="p-2">
+              {% if not p.posted %}
+              <form method="post" action="/api/approve/{{p.id}}">
+                <button type="submit" class="bg-green-600 text-white px-3 py-1 rounded">Approve & Post</button>
+              </form>
+              {% else %}<span class="text-gray-500">Posted</span>{% endif %}
+            </td>
+          </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </section>
+
+    <!-- Logs -->
+    <section>
+      <h2 class="text-xl font-semibold mb-2">Logs</h2>
+      <ul class="bg-white p-4 rounded-xl shadow max-h-64 overflow-y-auto text-sm">
+        {% for log in logs %}
+        <li>[{{log.status}}] {{log.message}}</li>
+        {% endfor %}
+      </ul>
+    </section>
+
+  </div>
+</body>
+</html>
