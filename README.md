@@ -1,4 +1,4 @@
-# Reddit Niche-Swappable Warm-Up MVP (Do-It-Now Build)
+# Reddit Niche-Swappable Warm-Up MVP 
 
 **What you get right now**
 - FastAPI backend + SQLite DB
