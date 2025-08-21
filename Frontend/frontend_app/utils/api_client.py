@@ -15,9 +15,12 @@ class APIClient:
             if response.status_code == 200:
                 token_data = response.json()
                 st.session_state.access_token = token_data["access_token"]
+                st.session_state.user_authenticated = True
+                st.session_state.username = username
                 return True
             return False
         except:
+
             return False
 
     def get(self, endpoint: str):

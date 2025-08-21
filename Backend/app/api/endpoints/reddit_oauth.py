@@ -16,14 +16,12 @@ router = APIRouter()
 
 @router.get("/reddit/connect")
 def connect_reddit_account(
-        current_user: User = Depends(get_current_user)
+    current_user: User = Depends(get_current_user)
 ):
-    """Redirect user to Reddit for OAuth2 authorization."""
-    # Generate state parameter for security (optional but recommended)
+    """Return Reddit OAuth2 URL for frontend to handle redirect."""
     state = f"user_{current_user.id}"
-
     auth_url = reddit_oauth.get_authorization_url(state=state)
-    return RedirectResponse(auth_url)
+    return {"auth_url": auth_url}
 
 
 @router.get("/reddit/callback", response_model=RedditAccount)
@@ -70,6 +68,8 @@ def reddit_oauth_callback(
         return account
 
     except Exception as e:
+        import traceback
+        print("OAuth Exception:", traceback.format_exc())  # Debugging
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail=f"Failed to complete OAuth flow: {str(e)}"

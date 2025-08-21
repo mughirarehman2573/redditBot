@@ -6,18 +6,21 @@ from backend.app.db.session import engine
 from backend.app.core.config import settings
 from backend.app.api.endpoints import auth, reddit_oauth,reddit_accounts,content,niches,tasks,activity, reddit_actions
 
-app = FastAPI(title="Reddit Automation Suite")
+app = FastAPI(title="Reddit Automation ")
 
-# -------------------------------
-# CORS Middleware
-# -------------------------------
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["http://localhost:8000"],  # Streamlit frontend
+    allow_origins=[
+        "http://localhost:8501",
+        "http://localhost:8000",
+        "http://127.0.0.1:8000"
+    ],
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
 )
+
+
 
 # -------------------------------
 # Routers

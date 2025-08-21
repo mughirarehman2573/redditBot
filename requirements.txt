@@ -20,3 +20,4 @@ shim~=0.1.0
 sqlalchemy==2.0.23
 streamlit>=1.28.0
 uvicorn==0.24.0
+utils~=1.0.2

@@ -53,6 +53,7 @@ class RedditAccount(Base):
     total_comments = Column(Integer, default=0)
     karma = Column(Integer, default=0)
     account_age_days = Column(Integer, default=0)
+    created_at = Column(DateTime(timezone=True), server_default=func.now())
     user_id = Column(Integer, ForeignKey("users.id"), nullable=False)
 
     owner = relationship("User", back_populates="reddit_accounts")
