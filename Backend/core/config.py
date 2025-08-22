@@ -7,7 +7,7 @@ ALGORITHM = "HS256"
 
 REDDIT_CLIENT_ID = os.getenv("REDDIT_CLIENT_ID", "kpSy6WiVzyZjjQq4NMg6OA")
 REDDIT_CLIENT_SECRET = os.getenv("REDDIT_CLIENT_SECRET", "Dx0u0TIJowrE8rxiOPkoREM51oposg")
-REDDIT_REDIRECT_URI = os.getenv("REDDIT_REDIRECT_URI", "http://44.243.107.52:8000/index.html")
+REDDIT_REDIRECT_URI = os.getenv("REDDIT_REDIRECT_URI", "http://localhost:8000/index.html")
 REDDIT_OAUTH_URL = "https://www.reddit.com/api/v1/authorize"
 REDDIT_TOKEN_URL = "https://www.reddit.com/api/v1/access_token"
 

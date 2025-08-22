@@ -2,6 +2,7 @@ import os
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from starlette.staticfiles import StaticFiles
+from fastapi.responses import JSONResponse
 
 from database.db import engine, Base
 from api import auth as auth_routes, reddit as reddit_routes, schedule as schedule_routes
@@ -33,6 +34,12 @@ def create_app() -> FastAPI:
     app.include_router(auth_routes.router)
     app.include_router(reddit_routes.router)
     app.include_router(schedule_routes.router)
+
+    @app.get("/config")
+    def get_config():
+        return JSONResponse({
+            "API_BASE": os.getenv("API_BASE", "http://localhost:8000")
+        })
 
     app.mount("/", StaticFiles(directory="static", html=True), name="static")
 

@@ -22,6 +22,8 @@ def create_schedule(
     sched = RedditSchedule(
         account_id=account.id,
         run_at=payload.run_at,
+        start_date=payload.start_date,
+        end_date=payload.end_date,
         action=payload.action,
         prompt=payload.prompt,
     )
@@ -29,6 +31,7 @@ def create_schedule(
     db.commit()
     db.refresh(sched)
     return sched
+
 
 @router.get("/")
 def list_schedules(db: Session = Depends(get_db), current_user: User = Depends(get_current_user)):
