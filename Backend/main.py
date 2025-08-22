@@ -1,16 +1,16 @@
 import os
+import asyncio
+from datetime import datetime
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from starlette.staticfiles import StaticFiles
 from fastapi.responses import JSONResponse
-
 from database.db import engine, Base
-from api import auth as auth_routes, reddit as reddit_routes, schedule as schedule_routes
-#
+from api import auth as auth_routes, reddit as reddit_routes, schedule as schedule_routes, stats as stats_routes
 from apscheduler.schedulers.background import BackgroundScheduler
 from workers.scheduler import run_schedules
-
 from dotenv import load_dotenv
+import logging
 
 load_dotenv()
 
@@ -35,6 +35,8 @@ def create_app() -> FastAPI:
     app.include_router(reddit_routes.router)
     app.include_router(schedule_routes.router)
 
+    app.include_router(stats_routes.router)
+
     @app.get("/config")
     def get_config():
         return JSONResponse({
@@ -44,8 +46,23 @@ def create_app() -> FastAPI:
     app.mount("/", StaticFiles(directory="static", html=True), name="static")
 
     scheduler = BackgroundScheduler()
-    scheduler.add_job(run_schedules, "interval", minutes=int(os.getenv("SCHEDULER_INTERVAL_MINUTES", "1")))
+
+    def run_schedules_wrapper():
+        asyncio.run(run_schedules())
+
+    scheduler.add_job(
+        run_schedules_wrapper,
+        "interval",
+        minutes=int(os.getenv("SCHEDULER_INTERVAL_MINUTES", "1"))
+    )
     scheduler.start()
+
+    # Setup logging
+    logging.basicConfig(level=logging.INFO)
+    logging.getLogger('apscheduler').setLevel(logging.DEBUG)
+
+    print("✅ Scheduler started")
+    print("⚡ time now", datetime.now())
 
     return app
 
