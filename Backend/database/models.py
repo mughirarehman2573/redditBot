@@ -49,6 +49,7 @@ class RedditSchedule(Base):
     action: Mapped[str] = mapped_column(String(20), default="comment")
     prompt: Mapped[str] = mapped_column(Text, nullable=True)
     status: Mapped[str] = mapped_column(String(20), default="pending")
+    excuted: Mapped[bool] = mapped_column(Boolean, default=False, nullable=True)
 
     account: Mapped["RedditAccount"] = relationship(back_populates="schedules")
 

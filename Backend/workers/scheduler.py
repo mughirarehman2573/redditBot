@@ -1,5 +1,4 @@
 import os
-import time
 import random
 import requests
 import asyncio
@@ -26,10 +25,11 @@ USER_AGENT = (
 account_windows = {}
 
 def get_account_window(account_id):
-    """Return (start_hour, end_hour) for today, caching daily random hours."""
     today = datetime.now().date()
     if account_id not in account_windows or account_windows[account_id][0].date() != today:
-        start_hour = datetime.now().replace(hour=random.randint(0, 22), minute=0, second=0, microsecond=0)
+        start_hour = datetime.now().replace(
+            hour=random.randint(0, 2), minute=0, second=0, microsecond=0
+        )
         end_hour = start_hour + timedelta(hours=random.choice([1, 2]))
         account_windows[account_id] = (start_hour, end_hour)
         print(f"🎲 Assigned daily window for account {account_id}: {start_hour} → {end_hour}")
@@ -42,13 +42,14 @@ async def process_schedule(sched, db: Session):
         return
 
     local_now = datetime.now()
-    # start_hour, end_hour = get_account_window(account.id)
+    start_hour, end_hour = get_account_window(account.id)
     # if not (start_hour <= local_now <= end_hour):
     #     print(f"⏭️ Account {account.username} skipped (outside daily window {start_hour.hour}-{end_hour.hour})")
     #     return
 
     print(f"➡️ Processing schedule ID={sched.id} for account {account.username}")
 
+    # refresh token if needed
     if account.token_expires_at <= local_now:
         try:
             print("🔄 Refreshing token…")
@@ -110,26 +111,35 @@ async def process_schedule(sched, db: Session):
         except Exception as e:
             print("❌ Error posting comment:", e)
 
+    # ✅ mark this schedule as executed + done
     sched.status = "done"
+    sched.executed = True
     db.commit()
+    print(f"✅ Schedule {sched.id} marked as done & executed")
+
+    # check if all schedules for this account are completed
+    pending = db.query(RedditSchedule).filter(
+        RedditSchedule.account_id == account.id,
+        RedditSchedule.status != "completed"
+    ).count()
+    if pending == 0:
+        sched.status = "completed"
+        db.commit()
+        print(f"🏁 All schedules done for account {account.username} → status set to completed")
 
 async def run_schedules():
     db: Session = SessionLocal()
     print("⚡ run_schedules triggered at", datetime.now())
     try:
         local_now = datetime.now()
-        start_hour = local_now.replace(minute=0, second=0, microsecond=0)
-        end_hour = start_hour + timedelta(hours=1)
 
         schedules = db.query(RedditSchedule).filter(
-            RedditSchedule.run_at >= start_hour,
-            RedditSchedule.run_at < end_hour,
             RedditSchedule.status == "pending",
             (RedditSchedule.start_date == None) | (RedditSchedule.start_date <= local_now.date()),
             (RedditSchedule.end_date == None) | (RedditSchedule.end_date >= local_now.date())
         ).all()
 
-        print(f"📋 Found {len(schedules)} pending schedules this hour")
+        print(f"📋 Found {len(schedules)} pending schedules")
         tasks = [process_schedule(s, db) for s in schedules]
         if tasks:
             await asyncio.gather(*tasks)
@@ -138,7 +148,25 @@ async def run_schedules():
     finally:
         db.close()
 
+async def reset_executed_daily():
+    """Reset executed=False for valid schedules every midnight."""
+    db: Session = SessionLocal()
+    try:
+        today = datetime.now().date()
+        updated = db.query(RedditSchedule).filter(
+            RedditSchedule.end_date == None
+            | (RedditSchedule.end_date >= today)
+        ).update({"executed": False}, synchronize_session=False)
+        db.commit()
+        print(f"🔄 Reset {updated} schedules to executed=False for new day")
+    except Exception as e:
+        print("❌ Error in reset_executed_daily:", e)
+    finally:
+        db.close()
+
+# scheduler setup
 scheduler = AsyncIOScheduler()
 scheduler.add_job(run_schedules, "interval", minutes=1)
+scheduler.add_job(reset_executed_daily, "cron", hour=0, minute=0)  # reset at midnight
 scheduler.start()
-print("✅ Async Scheduler started with 1-minute interval")
+print("✅ Async Scheduler started (run every 1m, reset daily at midnight)")
