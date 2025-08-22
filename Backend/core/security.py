@@ -2,7 +2,7 @@ from datetime import datetime, timezone
 from typing import Optional
 import jwt  
 from passlib.context import CryptContext
-from config import SECRET_KEY, ALGORITHM
+from core.config import SECRET_KEY, ALGORITHM
 
 pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
 
