@@ -3,10 +3,9 @@ from fastapi.middleware.cors import CORSMiddleware
 from starlette.staticfiles import StaticFiles
 
 from app.database.db import engine, Base
-import app.database.models
-from app.api import auth as auth_routes
-from app.api import reddit as reddit_routes
-from app.api import schedule as schedule_routes
+from api import auth as auth_routes, reddit as reddit_routes, schedule as schedule_routes
+
+
 def create_app() -> FastAPI:
     app = FastAPI(title="RedditBot API (starter)")
 

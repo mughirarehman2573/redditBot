@@ -3,17 +3,15 @@ from datetime import datetime, timedelta
 import requests
 from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.orm import Session
-from starlette.responses import RedirectResponse
 
-from app.core.jwt import get_current_user
+from core.jwt import get_current_user
 from app.database.db import get_db
 from app.database.models import RedditAccount, User
 from app.schemas.reddit import RedditAccountOut, NicheUpdate
-from app.core.config import (
+from core.config import (
     REDDIT_CLIENT_ID, REDDIT_CLIENT_SECRET, REDDIT_REDIRECT_URI,
     REDDIT_OAUTH_URL, REDDIT_TOKEN_URL
 )
-from app.core.security import decode_token
 
 router = APIRouter(prefix="/reddit", tags=["reddit"])
 
