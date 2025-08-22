@@ -7,8 +7,8 @@ from fastapi.responses import JSONResponse
 from database.db import engine, Base
 from api import auth as auth_routes, reddit as reddit_routes, schedule as schedule_routes
 #
-# from apscheduler.schedulers.background import BackgroundScheduler
-# from workers.scheduler import run_schedules
+from apscheduler.schedulers.background import BackgroundScheduler
+from workers.scheduler import run_schedules
 
 from dotenv import load_dotenv
 
@@ -43,9 +43,9 @@ def create_app() -> FastAPI:
 
     app.mount("/", StaticFiles(directory="static", html=True), name="static")
 
-    # scheduler = BackgroundScheduler()
-    # scheduler.add_job(run_schedules, "interval", minutes=int(os.getenv("SCHEDULER_INTERVAL_MINUTES", "1")))
-    # scheduler.start()
+    scheduler = BackgroundScheduler()
+    scheduler.add_job(run_schedules, "interval", minutes=int(os.getenv("SCHEDULER_INTERVAL_MINUTES", "1")))
+    scheduler.start()
 
     return app
 
