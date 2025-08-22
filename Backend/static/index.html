@@ -6,59 +6,170 @@
 <title>RedditBot</title>
 <link href="https://unpkg.com/@picocss/pico@2/css/pico.min.css" rel="stylesheet">
 <style>
-  body { max-width: 1200px; margin: 2rem auto; }
+  body {
+    max-width: 1200px;
+    margin: 2rem auto;
+    font-family: "Segoe UI", system-ui, sans-serif;
+    background: #fafafa;
+    color: #222;
+  }
+  header.card {
+    background: linear-gradient(135deg, #6a11cb 0%, #2575fc 100%);
+    color: #fff;
+  }
+  header h2 { margin: 0; }
+  nav a {
+    margin-right: .75rem;
+    color: #fff !important;
+    font-weight: 500;
+  }
+  nav a:hover {
+    text-decoration: underline;
+  }
   .hidden { display: none; }
-  .card { padding: 1rem; border: 1px solid #eee; border-radius: 10px; margin-bottom: 1rem; }
+  .card {
+    padding: 1.5rem;
+    border: 1px solid #e3e3e3;
+    border-radius: 12px;
+    margin-bottom: 1.5rem;
+    background: #fff;
+    box-shadow: 0 2px 8px rgba(0,0,0,0.05);
+  }
   .grid-2 { display:grid; grid-template-columns: 1fr 1fr; gap: 1rem; }
-  nav a { margin-right: .75rem; }
-  .pill { padding: .25rem .6rem; border-radius: 20px; font-size: .8rem; background:#eef; }
-  .success { color: #0a0; }
-  .error { color: #a00; }
-  table td, table th { vertical-align: middle; }
-  canvas { max-width: 300px; }
+  .pill {
+    padding: .3rem .7rem;
+    border-radius: 20px;
+    font-size: .8rem;
+    background: #fff;
+    color: #333;
+    font-weight: 600;
+  }
+  .success { color: #2e7d32; font-weight: 500; }
+  .error { color: #c62828; font-weight: 500; }
+  table {
+    width: 100%;
+    border-collapse: collapse;
+    border-radius: 8px;
+    overflow: hidden;
+  }
+  table th, table td {
+    padding: .75rem;
+    text-align: left;
+    border-bottom: 1px solid #eee;
+  }
+  table thead {
+    background: #f5f7fa;
+    font-weight: 600;
+  }
+  table tbody tr:hover {
+    background: #f9f9f9;
+  }
+  button, input, select, textarea {
+    border-radius: 6px !important;
+  }
+  button.primary, #saveModesBtn {
+    background: #2575fc;
+    color: #fff;
+    border: none;
+    font-weight: 600;
+    cursor: pointer;
+    transition: background 0.2s ease;
+  }
+  button.primary:hover, #saveModesBtn:hover {
+    background: #1258d6;
+  }
+  #logoutBtn {
+    background: rgba(255,255,255,0.2);
+    border: none;
+    color: #fff;
+  }
+  #logoutBtn:hover { background: rgba(255,255,255,0.35); }
+  #scheduleList li {
+    padding: .5rem .75rem;
+    margin: .3rem 0;
+    background: #f7f9fc;
+    border: 1px solid #e3e6ed;
+    border-radius: 6px;
+  }
+  footer {
+    margin-top:2rem;
+    text-align:center;
+    color:#777;
+  }
+  h3, h5 { color: #333; }
+  .stats-details {
+    margin-top: 1rem;
+    padding: 1rem;
+    background: #f8f9fa;
+    border-radius: 8px;
+    border-left: 4px solid #2575fc;
+  }
+  .post-item, .comment-item {
+    padding: 0.75rem;
+    margin-bottom: 0.75rem;
+    background: white;
+    border-radius: 6px;
+    border: 1px solid #e9ecef;
+  }
+  .post-title {
+    font-weight: 600;
+    color: #2c3e50;
+    margin-bottom: 0.5rem;
+  }
+  .comment-body {
+    color: #34495e;
+    line-height: 1.4;
+  }
+  .timestamp {
+    font-size: 0.8rem;
+    color: #7f8c8d;
+    margin-top: 0.5rem;
+  }
 </style>
 <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
 </head>
 <body>
 
 <header class="card">
-  <h2>RedditBot</h2>
-  <nav id="nav" class="hidden">
-    <a href="#" data-view="dashboard">Dashboard</a>
-    <a href="#" data-view="accounts">Reddit Accounts</a>
-    <a href="#" data-view="stats">Stats</a>
-    <a href="#" data-view="add">Add Reddit Account</a>
-    <a href="#" data-view="schedule">Schedules</a>
-    <span id="who" class="pill"></span>
-    <button id="logoutBtn" class="secondary">Logout</button>
-  </nav>
+  <div style="display:flex;align-items:center;justify-content:space-between;">
+    <h2>RedditBot</h2>
+    <nav id="nav" class="hidden" style="display:flex;align-items:center;">
+      <a href="#" data-view="dashboard">Dashboard</a>
+      <a href="#" data-view="accounts">Accounts</a>
+      <a href="#" data-view="stats">Stats</a>
+      <a href="#" data-view="add">Add Account</a>
+      <a href="#" data-view="schedule">Schedules</a>
+      <span id="who" class="pill"></span>
+      <button id="logoutBtn">Logout</button>
+    </nav>
+  </div>
 </header>
 
 <main>
   <!-- Login -->
   <section id="view-login" class="card">
-    <h3>Admin Login</h3>
+    <h3>🔐 Admin Login</h3>
     <form id="loginForm">
       <div class="grid-2">
         <label>Email <input type="email" name="email" required /></label>
         <label>Password <input type="password" name="password" required /></label>
       </div>
-      <button type="submit">Login</button>
+      <button type="submit" class="primary" style="width:100%;margin-top:1rem;">Login</button>
     </form>
     <p id="loginMsg"></p>
   </section>
 
   <!-- Dashboard -->
   <section id="view-dashboard" class="card hidden">
-    <h3>Dashboard</h3>
+    <h3>📊 Dashboard</h3>
     <article class="card">
       <h5>Bot Modes</h5>
       <div class="grid-2">
         <label><input type="checkbox" id="modeCommenting"> Enable Commenting</label>
         <label><input type="checkbox" id="modePosting"> Enable Posting</label>
       </div>
-      <div class="grid-2" style="margin-top:.75rem;">
-        <button id="saveModesBtn">Save Modes</button>
+      <div class="grid-2" style="margin-top:1rem;">
+        <button id="saveModesBtn" class="primary">Save Modes</button>
         <span id="modesMsg"></span>
       </div>
     </article>
@@ -76,7 +187,7 @@
 
   <!-- Accounts -->
   <section id="view-accounts" class="card hidden">
-    <h3>Your Reddit Accounts</h3>
+    <h3>👤 Your Reddit Accounts</h3>
     <table>
       <thead><tr><th>#</th><th>Username</th><th>Niche</th><th>Expires</th><th>Stats</th></tr></thead>
       <tbody id="accountsTbody"><tr><td colspan="5">Loading…</td></tr></tbody>
@@ -86,53 +197,43 @@
 
   <!-- Stats -->
   <section id="view-stats" class="card hidden">
-    <h3>Account Stats</h3>
-    <div id="statsContainer">Loading…</div>
+    <h3>📈 Account Stats</h3>
+    <div id="statsContainer" style="padding:1rem;background:#f9fafc;border-radius:8px;">Loading…</div>
   </section>
 
   <!-- Add -->
   <section id="view-add" class="card hidden">
-    <h3>Add Reddit Account</h3>
-    <p>Click to open Reddit login. Once complete, Reddit will redirect back here and auto-link.</p>
-    <button id="getAuthUrlBtn">Link Reddit Account</button>
+    <h3>➕ Add Reddit Account</h3>
+    <p>Click below to open Reddit login. After completing, you’ll be redirected back here automatically.</p>
+    <button id="getAuthUrlBtn" class="primary">Link Reddit Account</button>
     <p id="addMsg"></p>
   </section>
 
   <!-- Schedules -->
   <section id="view-schedule" class="card hidden">
-    <h3>Schedules</h3>
-    <form id="scheduleForm">
-      <label>Reddit Account
-        <select id="scheduleAccount"></select>
-      </label>
-      <label>Run At
-        <input type="datetime-local" id="scheduleTime" required />
-      </label>
-      <label>Start Date
-        <input type="date" id="scheduleStartDate" />
-      </label>
-      <label>End Date
-        <input type="date" id="scheduleEndDate" />
-      </label>
+    <h3>⏰ Manage Schedules</h3>
+    <form id="scheduleForm" style="margin-bottom:1rem;">
+      <label>Reddit Account <select id="scheduleAccount"></select></label>
+      <label>Run At <input type="datetime-local" id="scheduleTime" required /></label>
+      <label>Start Date <input type="date" id="scheduleStartDate" /></label>
+      <label>End Date <input type="date" id="scheduleEndDate" /></label>
       <label>Action
         <select id="scheduleAction">
           <option value="comment">Comment</option>
           <option value="post">Post</option>
         </select>
       </label>
-      <label>Prompt (optional)
-        <textarea id="schedulePrompt"></textarea>
-      </label>
-      <button type="submit">Save Schedule</button>
+      <label>Prompt (optional) <textarea id="schedulePrompt"></textarea></label>
+      <button type="submit" class="primary" style="margin-top:1rem;">Save Schedule</button>
     </form>
     <p id="scheduleMsg"></p>
     <h5>Your Schedules</h5>
-    <ul id="scheduleList"></ul>
+    <ul id="scheduleList" style="list-style:none;padding:0;"></ul>
   </section>
 </main>
 
-<footer style="margin-top:2rem;text-align:center;color:#666;">
-  <small>RedditBot • FastAPI</small>
+<footer>
+  <small>⚡ RedditBot • FastAPI</small>
 </footer>
 
 <script>
@@ -271,6 +372,9 @@ async function loadAccounts(){
              <button data-save-niche="${acc.id}">Save</button></td>
            <td>${new Date(acc.token_expires_at).toLocaleString()}</td>
            <td><canvas id="${rowId}" width="120" height="80"></canvas></td>
+         </tr>
+         <tr id="account-details-${acc.id}-row" style="display: none;">
+           <td colspan="5" id="account-details-${acc.id}"></td>
          </tr>`);
       loadAccountStats(acc.id,rowId);
     });
@@ -293,17 +397,74 @@ async function loadAccounts(){
     msg.innerHTML=`<span class="error">${e.message}</span>`;
   }
 }
-async function loadAccountStats(accountId,canvasId){
-  try{
+async function loadAccountStats(accountId, canvasId){
+  try {
     const API_BASE = await ensureApiBase();
-    const r=await fetch(`${API_BASE}/stats/account/${accountId}`,{headers:{Authorization:'Bearer '+token()}});
-    const d=await r.json();
-    if(!r.ok||d.error)return;
-    new Chart(document.getElementById(canvasId).getContext('2d'),{type:'pie',
-      data:{labels:['Comments','Posts'],datasets:[{data:[d.comments,d.posts],backgroundColor:['#4e79a7','#f28e2b']}]},
-      options:{plugins:{legend:{position:'bottom'}}}});
-  }catch(e){console.error('Stats error',e);}
+    const r = await fetch(`${API_BASE}/stats/account/${accountId}`, {
+      headers:{Authorization:'Bearer '+token()}
+    });
+    const d = await r.json();
+    if(!r.ok || d.error) return;
+
+    // Chart
+    new Chart(document.getElementById(canvasId).getContext('2d'),{
+      type:'pie',
+      data:{
+        labels:['Comments','Posts'],
+        datasets:[{data:[d.comments_count,d.posts_count],backgroundColor:['#4e79a7','#f28e2b']}]
+      },
+      options:{plugins:{legend:{position:'bottom'}}}
+    });
+
+    // Add click event to show details
+    document.getElementById(canvasId).style.cursor = 'pointer';
+    document.getElementById(canvasId).addEventListener('click', function() {
+      const detailsRow = document.getElementById(`account-details-${accountId}-row`);
+      detailsRow.style.display = detailsRow.style.display === 'none' ? 'table-row' : 'none';
+    });
+
+    // Format dates for display
+    const formatDate = (timestamp) => {
+      return new Date(timestamp * 1000).toLocaleDateString();
+    };
+
+    // Populate with detailed stats
+    const container = document.getElementById(`account-details-${accountId}`);
+    container.innerHTML = `
+      <div class="stats-details">
+        <h4>Detailed Statistics for ${d.username}</h4>
+        <div class="grid-2">
+          <div>
+            <h5>Posts (${d.posts_count})</h5>
+            <div style="max-height: 300px; overflow-y: auto;">
+              ${d.posts.map(p => `
+                <div class="post-item">
+                  <div class="post-title">${p.title}</div>
+                  ${p.body ? `<div>${p.body.substring(0, 100)}${p.body.length > 100 ? '...' : ''}</div>` : ''}
+                  <div class="timestamp">Posted on: ${formatDate(p.created_utc)}</div>
+                </div>
+              `).join('')}
+            </div>
+          </div>
+          <div>
+            <h5>Comments (${d.comments_count})</h5>
+            <div style="max-height: 300px; overflow-y: auto;">
+              ${d.comments.map(c => `
+                <div class="comment-item">
+                  <div class="comment-body">${c.body.substring(0, 150)}${c.body.length > 150 ? '...' : ''}</div>
+                  <div class="timestamp">Posted on: ${formatDate(c.created_utc)}</div>
+                </div>
+              `).join('')}
+            </div>
+          </div>
+        </div>
+      </div>
+    `;
+  } catch(e){
+    console.error('Stats error', e);
+  }
 }
+
 
 // --- Global Stats ---
 async function loadStats(){

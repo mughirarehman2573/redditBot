@@ -62,6 +62,8 @@ class RedditPost(Base):
     title: Mapped[str] = mapped_column(String(300))
     body: Mapped[str] = mapped_column(Text)
     created_utc: Mapped[int] = mapped_column(Integer, index=True)
+    subreddit: Mapped[str] = mapped_column(String(300),nullable=True)
+    url: Mapped[str] = mapped_column(String(300), nullable=True)
 
     account: Mapped["RedditAccount"] = relationship(back_populates="posts")
 

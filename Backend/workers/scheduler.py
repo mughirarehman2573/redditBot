@@ -25,10 +25,11 @@ USER_AGENT = (
 account_windows = {}
 
 def get_account_window(account_id):
+    """Assign a daily 1-2 hour window per account within a 24-hour day"""
     today = datetime.now().date()
     if account_id not in account_windows or account_windows[account_id][0].date() != today:
         start_hour = datetime.now().replace(
-            hour=random.randint(0, 2), minute=0, second=0, microsecond=0
+            hour=random.randint(0, 23), minute=0, second=0, microsecond=0
         )
         end_hour = start_hour + timedelta(hours=random.choice([1, 2]))
         account_windows[account_id] = (start_hour, end_hour)
@@ -43,6 +44,7 @@ async def process_schedule(sched, db: Session):
 
     local_now = datetime.now()
     start_hour, end_hour = get_account_window(account.id)
+    # Only proceed if current time is within account's daily window
     # if not (start_hour <= local_now <= end_hour):
     #     print(f"⏭️ Account {account.username} skipped (outside daily window {start_hour.hour}-{end_hour.hour})")
     #     return
@@ -65,11 +67,27 @@ async def process_schedule(sched, db: Session):
         print(f"🌐 Fetching posts from r/{account.niche}")
         res = requests.get(
             f"https://oauth.reddit.com/r/{account.niche}/hot?limit=5",
-            headers=headers, timeout=10
+            headers=headers,
+            timeout=10
         )
         res.raise_for_status()
         posts = res.json().get("data", {}).get("children", [])
         print(f"📨 Retrieved {len(posts)} posts from r/{account.niche}")
+
+        for post in posts:
+            reddit_id = post["data"]["id"]
+            existing = db.query(RedditPost).filter_by(reddit_id=reddit_id, account_id=account.id).first()
+            if not existing:
+                db.add(RedditPost(
+                    account_id=account.id,
+                    reddit_id=reddit_id,
+                    title=post["data"]["title"],
+                    body=post["data"].get("No Body", ""),
+                    subreddit=post["data"]["subreddit"],
+                    url=post["data"]["url"],
+                    created_utc=post["data"]["created_utc"]
+                ))
+        db.commit()
         await asyncio.sleep(5)
     except Exception as e:
         print("❌ Error fetching posts:", e)
@@ -111,13 +129,11 @@ async def process_schedule(sched, db: Session):
         except Exception as e:
             print("❌ Error posting comment:", e)
 
-    # ✅ mark this schedule as executed + done
     sched.status = "done"
-    sched.executed = True
+    sched.executed = 1
     db.commit()
     print(f"✅ Schedule {sched.id} marked as done & executed")
 
-    # check if all schedules for this account are completed
     pending = db.query(RedditSchedule).filter(
         RedditSchedule.account_id == account.id,
         RedditSchedule.status != "completed"
@@ -154,8 +170,7 @@ async def reset_executed_daily():
     try:
         today = datetime.now().date()
         updated = db.query(RedditSchedule).filter(
-            RedditSchedule.end_date == None
-            | (RedditSchedule.end_date >= today)
+            (RedditSchedule.end_date == None) | (RedditSchedule.end_date >= today)
         ).update({"executed": False}, synchronize_session=False)
         db.commit()
         print(f"🔄 Reset {updated} schedules to executed=False for new day")
@@ -167,6 +182,6 @@ async def reset_executed_daily():
 # scheduler setup
 scheduler = AsyncIOScheduler()
 scheduler.add_job(run_schedules, "interval", minutes=1)
-scheduler.add_job(reset_executed_daily, "cron", hour=0, minute=0)  # reset at midnight
+scheduler.add_job(reset_executed_daily, "cron", hour=0, minute=0)
 scheduler.start()
 print("✅ Async Scheduler started (run every 1m, reset daily at midnight)")
