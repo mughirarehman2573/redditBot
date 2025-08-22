@@ -16,6 +16,7 @@
   .error { color: #a00; }
   table td, table th { vertical-align: middle; }
 </style>
+<script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
 </head>
 <body>
 
@@ -75,8 +76,8 @@
   <section id="view-accounts" class="card hidden">
     <h3>Your Reddit Accounts</h3>
     <table>
-      <thead><tr><th>#</th><th>Username</th><th>Niche</th><th>Expires</th><th>Actions</th></tr></thead>
-      <tbody id="accountsTbody"><tr><td colspan="5">Loading…</td></tr></tbody>
+      <thead><tr><th>#</th><th>Username</th><th>Niche</th><th>Expires</th><th>Stats</th><th>Actions</th></tr></thead>
+      <tbody id="accountsTbody"><tr><td colspan="6">Loading…</td></tr></tbody>
     </table>
     <p id="accountsMsg"></p>
   </section>
@@ -98,6 +99,12 @@
       </label>
       <label>Run At
         <input type="datetime-local" id="scheduleTime" required />
+      </label>
+      <label>Start Date
+        <input type="date" id="scheduleStartDate" />
+      </label>
+      <label>End Date
+        <input type="date" id="scheduleEndDate" />
       </label>
       <label>Action
         <select id="scheduleAction">
@@ -217,14 +224,15 @@ async function refreshStats(){
 // --- Accounts ---
 async function loadAccounts(){
   const tb=document.getElementById('accountsTbody'),msg=document.getElementById('accountsMsg');
-  tb.innerHTML='<tr><td colspan="5">Loading…</td></tr>';
+  tb.innerHTML='<tr><td colspan="6">Loading…</td></tr>';
   try{
     const r=await fetch(`${API_BASE}/reddit/accounts`,{headers:{Authorization:'Bearer '+token()}});
     const d=await r.json();
     if(!r.ok)throw new Error(d.detail||'Failed');
-    if(!d.length){tb.innerHTML='<tr><td colspan="5">No accounts.</td></tr>';return;}
+    if(!d.length){tb.innerHTML='<tr><td colspan="6">No accounts.</td></tr>';return;}
     tb.innerHTML='';
     d.forEach((acc,i)=>{
+      const rowId=`chart-${acc.id}`;
       tb.insertAdjacentHTML('beforeend',
         `<tr>
            <td>${i+1}</td>
@@ -234,8 +242,10 @@ async function loadAccounts(){
              <button data-save-niche="${acc.id}">Save</button>
            </td>
            <td>${new Date(acc.token_expires_at).toLocaleString()}</td>
+           <td><canvas id="${rowId}" width="120" height="80"></canvas></td>
            <td><button data-refresh="${acc.id}">Refresh</button></td>
          </tr>`);
+      loadAccountStats(acc.id,rowId);
     });
     // refresh token
     tb.querySelectorAll('button[data-refresh]').forEach(b=>b.addEventListener('click',async()=>{
@@ -261,9 +271,27 @@ async function loadAccounts(){
       }catch(e){msg.innerHTML=`<span class="error">${e.message}</span>`;}
     }));
   }catch(e){
-    tb.innerHTML='<tr><td colspan="5">Error</td></tr>';
+    tb.innerHTML='<tr><td colspan="6">Error</td></tr>';
     msg.innerHTML=`<span class="error">${e.message}</span>`;
   }
+}
+
+// --- Account stats charts ---
+async function loadAccountStats(accountId,canvasId){
+  try{
+    const r=await fetch(`${API_BASE}/reddit/account/${accountId}`,{headers:{Authorization:'Bearer '+token()}});
+    const d=await r.json();
+    if(!r.ok||d.error)return;
+    const ctx=document.getElementById(canvasId).getContext('2d');
+    new Chart(ctx,{
+      type:'bar',
+      data:{
+        labels:['Comments','Posts'],
+        datasets:[{label:'Last 7d',data:[d.comments,d.posts],backgroundColor:['#4e79a7','#f28e2b']}]
+      },
+      options:{responsive:false,plugins:{legend:{display:false}},scales:{y:{beginAtZero:true}}}
+    });
+  }catch(e){console.error('Stats error',e);}
 }
 
 // --- OAuth popup ---
@@ -319,6 +347,8 @@ document.getElementById('scheduleForm').addEventListener('submit',async e=>{
       headers:{'Content-Type':'application/json','Authorization':'Bearer '+token()},
       body:JSON.stringify({
         run_at:document.getElementById('scheduleTime').value,
+        start_date:document.getElementById('scheduleStartDate').value || null,
+        end_date:document.getElementById('scheduleEndDate').value || null,
         action:document.getElementById('scheduleAction').value,
         prompt:document.getElementById('schedulePrompt').value
       })
@@ -335,7 +365,7 @@ async function loadSchedules(){
   const d=await r.json();
   ul.innerHTML='';
   d.forEach(s=>{
-    ul.insertAdjacentHTML('beforeend',`<li>${s.action} at ${s.run_at} for account ${s.account_id}</li>`);
+    ul.insertAdjacentHTML('beforeend',`<li>${s.action} at ${s.run_at} (${s.start_date||'—'} → ${s.end_date||'—'}) for account ${s.account_id}</li>`);
   });
 }
 

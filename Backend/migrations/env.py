@@ -4,8 +4,8 @@ from sqlalchemy import engine_from_config, pool
 from alembic import context
 
 # Import your Base here 👇
-from app.database.db import Base  # adjust path if needed
-import app.database.models  # import all models so Alembic sees them
+from database.db import Base  # adjust path if needed
+import database.models  # import all models so Alembic sees them
 
 # this is the Alembic Config object
 config = context.config

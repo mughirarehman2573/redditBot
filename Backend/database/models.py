@@ -43,11 +43,15 @@ class RedditSchedule(Base):
     account_id: Mapped[int] = mapped_column(ForeignKey("reddit_accounts.id", ondelete="CASCADE"), index=True)
 
     run_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+    start_date: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=True)
+    end_date: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=True)
+
     action: Mapped[str] = mapped_column(String(20), default="comment")
     prompt: Mapped[str] = mapped_column(Text, nullable=True)
     status: Mapped[str] = mapped_column(String(20), default="pending")
 
     account: Mapped["RedditAccount"] = relationship(back_populates="schedules")
+
 
 class RedditPost(Base):
     __tablename__ = "reddit_posts"
