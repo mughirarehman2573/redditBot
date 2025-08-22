@@ -5,9 +5,9 @@ from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.orm import Session
 
 from core.jwt import get_current_user
-from app.database.db import get_db
-from app.database.models import RedditAccount, User
-from app.schemas.reddit import RedditAccountOut, NicheUpdate
+from database.db import get_db
+from database.models import RedditAccount, User
+from schemas.reddit import RedditAccountOut, NicheUpdate
 from core.config import (
     REDDIT_CLIENT_ID, REDDIT_CLIENT_SECRET, REDDIT_REDIRECT_URI,
     REDDIT_OAUTH_URL, REDDIT_TOKEN_URL

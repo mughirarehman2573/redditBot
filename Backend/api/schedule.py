@@ -1,10 +1,10 @@
 from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.orm import Session
 
-from app.database.db import get_db
-from app.database.models import RedditSchedule, RedditAccount, User
+from database.db import get_db
+from database.models import RedditSchedule, RedditAccount, User
 from core.jwt import get_current_user
-from app.schemas.schedule import ScheduleCreate
+from schemas.schedule import ScheduleCreate
 
 router = APIRouter(prefix="/schedule", tags=["schedule"])
 

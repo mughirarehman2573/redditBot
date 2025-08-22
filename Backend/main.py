@@ -2,7 +2,7 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from starlette.staticfiles import StaticFiles
 
-from app.database.db import engine, Base
+from database.db import engine, Base
 from api import auth as auth_routes, reddit as reddit_routes, schedule as schedule_routes
 
 
