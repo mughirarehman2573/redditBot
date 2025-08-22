@@ -14,6 +14,7 @@ def create_app() -> FastAPI:
         "http://localhost:8000",
         "http://127.0.0.1:8000",
         "http://0.0.0.0:8000",
+        "http://44.243.107.52:8000"
     ]
     app.add_middleware(
         CORSMiddleware,
