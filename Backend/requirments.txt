@@ -5,7 +5,7 @@ pydantic==2.8.2
 passlib[bcrypt]==1.7.4
 PyJWT==2.8.0
 python-dotenv==1.0.1
-requests==2.32.5git
+requests==2.32.5
 requests==2.32.5
 openai==1.101.0
 APScheduler==3.11.0
