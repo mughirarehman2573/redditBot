@@ -6,15 +6,16 @@
 <title>RedditBot</title>
 <link href="https://unpkg.com/@picocss/pico@2/css/pico.min.css" rel="stylesheet">
 <style>
-  body { max-width: 1100px; margin: 2rem auto; }
+  body { max-width: 1200px; margin: 2rem auto; }
   .hidden { display: none; }
-  .card { padding: 1rem; border: 1px solid #eee; border-radius: 10px; }
+  .card { padding: 1rem; border: 1px solid #eee; border-radius: 10px; margin-bottom: 1rem; }
   .grid-2 { display:grid; grid-template-columns: 1fr 1fr; gap: 1rem; }
   nav a { margin-right: .75rem; }
   .pill { padding: .25rem .6rem; border-radius: 20px; font-size: .8rem; background:#eef; }
   .success { color: #0a0; }
   .error { color: #a00; }
   table td, table th { vertical-align: middle; }
+  canvas { max-width: 300px; }
 </style>
 <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
 </head>
@@ -25,6 +26,7 @@
   <nav id="nav" class="hidden">
     <a href="#" data-view="dashboard">Dashboard</a>
     <a href="#" data-view="accounts">Reddit Accounts</a>
+    <a href="#" data-view="stats">Stats</a>
     <a href="#" data-view="add">Add Reddit Account</a>
     <a href="#" data-view="schedule">Schedules</a>
     <span id="who" class="pill"></span>
@@ -76,16 +78,22 @@
   <section id="view-accounts" class="card hidden">
     <h3>Your Reddit Accounts</h3>
     <table>
-      <thead><tr><th>#</th><th>Username</th><th>Niche</th><th>Expires</th><th>Stats</th><th>Actions</th></tr></thead>
-      <tbody id="accountsTbody"><tr><td colspan="6">Loading…</td></tr></tbody>
+      <thead><tr><th>#</th><th>Username</th><th>Niche</th><th>Expires</th><th>Stats</th></tr></thead>
+      <tbody id="accountsTbody"><tr><td colspan="5">Loading…</td></tr></tbody>
     </table>
     <p id="accountsMsg"></p>
+  </section>
+
+  <!-- Stats -->
+  <section id="view-stats" class="card hidden">
+    <h3>Account Stats</h3>
+    <div id="statsContainer">Loading…</div>
   </section>
 
   <!-- Add -->
   <section id="view-add" class="card hidden">
     <h3>Add Reddit Account</h3>
-    <p>Click to open Reddit login in a popup. Once complete, the popup will close automatically.</p>
+    <p>Click to open Reddit login. Once complete, the popup will redirect back and auto-link.</p>
     <button id="getAuthUrlBtn">Link Reddit Account</button>
     <p id="addMsg"></p>
   </section>
@@ -128,23 +136,21 @@
 </footer>
 
 <script>
-const API_BASE='http://44.243.107.52:8000';
+const API_BASE = "http://localhost:8000";
 function token(){return localStorage.getItem('access_token')||'';}
 function setToken(t){localStorage.setItem('access_token',t);}
 function clearToken(){localStorage.removeItem('access_token');}
 function parseJwt(t){try{return JSON.parse(atob(t.split('.')[1]));}catch{return null;}}
-function setWho(sub){document.getElementById('who').textContent=sub?('UserID: '+sub):'';}
+function setWho(user){document.getElementById('who').textContent=user?('Logged in as: '+user):'';}
 
-const views={
-  login:document.getElementById('view-login'),
-  dashboard:document.getElementById('view-dashboard'),
-  accounts:document.getElementById('view-accounts'),
-  add:document.getElementById('view-add'),
-  schedule:document.getElementById('view-schedule')
-};
+const views={login:document.getElementById('view-login'),
+             dashboard:document.getElementById('view-dashboard'),
+             accounts:document.getElementById('view-accounts'),
+             stats:document.getElementById('view-stats'),
+             add:document.getElementById('view-add'),
+             schedule:document.getElementById('view-schedule')};
 const nav=document.getElementById('nav');
-function show(v){
-  Object.values(views).forEach(x=>x.classList.add('hidden'));
+function show(v){Object.values(views).forEach(x=>x.classList.add('hidden'));
   views[v].classList.remove('hidden');
   if(v!=='login')nav.classList.remove('hidden');else nav.classList.add('hidden');
 }
@@ -163,50 +169,33 @@ document.getElementById('loginForm').addEventListener('submit',async e=>{
     const data=await res.json();
     if(!res.ok)throw new Error(data.detail||'Login failed');
     setToken(data.access_token);
-    setWho(parseJwt(data.access_token)?.sub??'');
+    setWho(data.user?.email || "User");
     msg.textContent='Logged in.';
     await initAfterLogin();
     show('dashboard');
   }catch(err){msg.innerHTML=`<span class="error">${err.message}</span>`;}
 });
-document.getElementById('logoutBtn').addEventListener('click',()=>{clearToken();setWho('');show('login');});
+document.getElementById('logoutBtn').addEventListener('click',()=>{
+  clearToken();setWho('');show('login');
+});
 
 // --- Nav ---
-document.querySelectorAll('nav a[data-view]').forEach(a=>a.addEventListener('click',e=>{
-  e.preventDefault();show(a.dataset.view);
-  if(a.dataset.view==='accounts')loadAccounts();
-  if(a.dataset.view==='dashboard')refreshStats();
-  if(a.dataset.view==='schedule'){loadScheduleAccounts();loadSchedules();}
-}));
+document.querySelectorAll('nav a[data-view]').forEach(a=>{
+  a.addEventListener('click',e=>{
+    e.preventDefault();show(a.dataset.view);
+    if(a.dataset.view==='accounts')loadAccounts();
+    if(a.dataset.view==='stats')loadStats();
+    if(a.dataset.view==='dashboard')refreshStats();
+    if(a.dataset.view==='schedule'){loadScheduleAccounts();loadSchedules();}
+  });
+});
 
 // --- Modes ---
 const modeCommenting=document.getElementById('modeCommenting'),
       modePosting=document.getElementById('modePosting'),
       modesMsg=document.getElementById('modesMsg');
-async function loadModes(){
-  try{
-    const r=await fetch(`${API_BASE}/user/settings`,{headers:{Authorization:'Bearer '+token()}});
-    if(r.ok){const s=await r.json();
-      modeCommenting.checked=!!s.commenting_enabled;
-      modePosting.checked=!!s.posting_enabled;return;}
-  }catch{}
-  modeCommenting.checked=localStorage.getItem('mode_commenting')==='1';
-  modePosting.checked=localStorage.getItem('mode_posting')==='1';
-}
-async function saveModes(){
-  modesMsg.textContent='Saving…';
-  try{
-    const r=await fetch(`${API_BASE}/user/settings`,{
-      method:'PUT',
-      headers:{'Content-Type':'application/json',Authorization:'Bearer '+token()},
-      body:JSON.stringify({commenting_enabled:modeCommenting.checked,posting_enabled:modePosting.checked})
-    });
-    if(r.ok){modesMsg.innerHTML='<span class="success">Saved.</span>';return;}
-  }catch{}
-  localStorage.setItem('mode_commenting',modeCommenting.checked?'1':'0');
-  localStorage.setItem('mode_posting',modePosting.checked?'1':'0');
-  modesMsg.innerHTML='<span class="success">Saved (local).</span>';
-}
+async function loadModes(){try{const r=await fetch(`${API_BASE}/user/settings`,{headers:{Authorization:'Bearer '+token()}});if(r.ok){const s=await r.json();modeCommenting.checked=!!s.commenting_enabled;modePosting.checked=!!s.posting_enabled;return;}}catch{}}
+async function saveModes(){modesMsg.textContent='Saving…';try{const r=await fetch(`${API_BASE}/user/settings`,{method:'PUT',headers:{'Content-Type':'application/json',Authorization:'Bearer '+token()},body:JSON.stringify({commenting_enabled:modeCommenting.checked,posting_enabled:modePosting.checked})});if(r.ok){modesMsg.innerHTML='<span class="success">Saved.</span>';return;}}catch{}}
 document.getElementById('saveModesBtn').addEventListener('click',saveModes);
 
 // --- Stats ---
@@ -224,14 +213,14 @@ async function refreshStats(){
 // --- Accounts ---
 async function loadAccounts(){
   const tb=document.getElementById('accountsTbody'),msg=document.getElementById('accountsMsg');
-  tb.innerHTML='<tr><td colspan="6">Loading…</td></tr>';
+  tb.innerHTML='<tr><td colspan="5">Loading…</td></tr>';
   try{
     const r=await fetch(`${API_BASE}/reddit/accounts`,{headers:{Authorization:'Bearer '+token()}});
-    const d=await r.json();
-    if(!r.ok)throw new Error(d.detail||'Failed');
-    if(!d.length){tb.innerHTML='<tr><td colspan="6">No accounts.</td></tr>';return;}
+    const accounts=await r.json();
+    if(!r.ok)throw new Error(accounts.detail||'Failed');
+    if(!accounts.length){tb.innerHTML='<tr><td colspan="5">No accounts.</td></tr>';return;}
     tb.innerHTML='';
-    d.forEach((acc,i)=>{
+    accounts.forEach((acc,i)=>{
       const rowId=`chart-${acc.id}`;
       tb.insertAdjacentHTML('beforeend',
         `<tr>
@@ -243,68 +232,73 @@ async function loadAccounts(){
            </td>
            <td>${new Date(acc.token_expires_at).toLocaleString()}</td>
            <td><canvas id="${rowId}" width="120" height="80"></canvas></td>
-           <td><button data-refresh="${acc.id}">Refresh</button></td>
          </tr>`);
       loadAccountStats(acc.id,rowId);
     });
-    // refresh token
-    tb.querySelectorAll('button[data-refresh]').forEach(b=>b.addEventListener('click',async()=>{
-      try{b.disabled=true;
-        await fetch(`${API_BASE}/reddit/accounts/${b.dataset.refresh}/refresh`,{method:'POST',headers:{Authorization:'Bearer '+token()}});
-        await loadAccounts();
-        msg.innerHTML='<span class="success">Refreshed.</span>';
-      }catch(e){msg.innerHTML=`<span class="error">${e.message}</span>`;}
-      finally{b.disabled=false;}
-    }));
-    // save niche
-    tb.querySelectorAll('button[data-save-niche]').forEach(btn=>btn.addEventListener('click',async()=>{
-      const accId=btn.dataset.saveNiche;
-      const niche=tb.querySelector(`input[data-niche="${accId}"]`).value;
-      try{
-        const r=await fetch(`${API_BASE}/reddit/accounts/${accId}/niche`,{
-          method:'PUT',
-          headers:{'Content-Type':'application/json',Authorization:'Bearer '+token()},
-          body:JSON.stringify({niche})
-        });
-        if(!r.ok)throw new Error('Failed to save niche');
-        msg.innerHTML='<span class="success">Niche updated.</span>';
-      }catch(e){msg.innerHTML=`<span class="error">${e.message}</span>`;}
-    }));
+    tb.querySelectorAll('button[data-save-niche]').forEach(btn=>{
+      btn.addEventListener('click',async()=>{
+        const accId=btn.dataset.saveNiche;
+        const niche=tb.querySelector(`input[data-niche="${accId}"]`).value;
+        try{
+          const r=await fetch(`${API_BASE}/reddit/accounts/${accId}/niche`,{
+            method:'PUT',
+            headers:{'Content-Type':'application/json',Authorization:'Bearer '+token()},
+            body:JSON.stringify({niche})
+          });
+          if(!r.ok)throw new Error('Failed to save niche');
+          msg.innerHTML='<span class="success">Niche updated.</span>';
+        }catch(e){msg.innerHTML=`<span class="error">${e.message}</span>`;}
+      });
+    });
   }catch(e){
-    tb.innerHTML='<tr><td colspan="6">Error</td></tr>';
+    tb.innerHTML='<tr><td colspan="5">Error</td></tr>';
     msg.innerHTML=`<span class="error">${e.message}</span>`;
   }
 }
 
-// --- Account stats charts ---
 async function loadAccountStats(accountId,canvasId){
   try{
     const r=await fetch(`${API_BASE}/reddit/account/${accountId}`,{headers:{Authorization:'Bearer '+token()}});
     const d=await r.json();
     if(!r.ok||d.error)return;
     const ctx=document.getElementById(canvasId).getContext('2d');
-    new Chart(ctx,{
-      type:'bar',
-      data:{
-        labels:['Comments','Posts'],
-        datasets:[{label:'Last 7d',data:[d.comments,d.posts],backgroundColor:['#4e79a7','#f28e2b']}]
-      },
-      options:{responsive:false,plugins:{legend:{display:false}},scales:{y:{beginAtZero:true}}}
-    });
+    new Chart(ctx,{type:'pie',
+      data:{labels:['Comments','Posts'],datasets:[{data:[d.comments,d.posts],backgroundColor:['#4e79a7','#f28e2b']}]},
+      options:{plugins:{legend:{position:'bottom'}}}});
   }catch(e){console.error('Stats error',e);}
+}
+
+// --- Global Stats ---
+async function loadStats(){
+  const container=document.getElementById('statsContainer');
+  container.innerHTML='Loading…';
+  try{
+    const r=await fetch(`${API_BASE}/reddit/accounts`,{headers:{Authorization:'Bearer '+token()}});
+    const accounts=await r.json();
+    if(!accounts.length){container.innerHTML='No accounts.';return;}
+    container.innerHTML='';
+    for(const acc of accounts){
+      const div=document.createElement('div');div.className='card';
+      div.innerHTML=`<h4>${acc.username} (${acc.niche||'No niche'})</h4><canvas id="stats-chart-${acc.id}" height="150"></canvas>`;
+      container.appendChild(div);
+      loadAccountStats(acc.id,`stats-chart-${acc.id}`);
+    }
+  }catch{container.innerHTML='Error loading stats.';}
 }
 
 // --- OAuth popup ---
 async function getAuthUrl(){
   const redirectUri="http://localhost:8000/reddit_popup.html";
   const r=await fetch(`${API_BASE}/reddit/authorize?redirect_uri=${encodeURIComponent(redirectUri)}`,{headers:{Authorization:'Bearer '+token()}});
-  const d=await r.json();if(!r.ok)throw new Error(d.detail||'Failed');
+  const d=await r.json();
+  if(!r.ok)throw new Error(d.detail||'Failed');
   return d.auth_url;
 }
 document.getElementById('getAuthUrlBtn').addEventListener('click',async()=>{
   const msg=document.getElementById('addMsg');msg.textContent='Redirecting to Reddit…';
-  try{const url=await getAuthUrl();window.location.href=url;}
-  catch(e){msg.innerHTML=`<span class="error">${e.message}</span>`;}
+  try{
+    const url=await getAuthUrl();window.location.href=url;
+  }catch(e){msg.innerHTML=`<span class="error">${e.message}</span>`;}
 });
 
 // --- Handle OAuth callback ---
@@ -331,13 +325,10 @@ window.addEventListener('DOMContentLoaded',async()=>{
 
 // --- Schedule ---
 async function loadScheduleAccounts(){
-  const sel=document.getElementById('scheduleAccount');
-  sel.innerHTML='';
+  const sel=document.getElementById('scheduleAccount');sel.innerHTML='';
   const r=await fetch(`${API_BASE}/reddit/accounts`,{headers:{Authorization:'Bearer '+token()}});
   const d=await r.json();
-  d.forEach(acc=>{
-    sel.insertAdjacentHTML('beforeend',`<option value="${acc.id}">${acc.username}</option>`);
-  });
+  d.forEach(acc=>{sel.insertAdjacentHTML('beforeend',`<option value="${acc.id}">${acc.username}</option>`);});
 }
 document.getElementById('scheduleForm').addEventListener('submit',async e=>{
   e.preventDefault();const msg=document.getElementById('scheduleMsg');
@@ -347,8 +338,8 @@ document.getElementById('scheduleForm').addEventListener('submit',async e=>{
       headers:{'Content-Type':'application/json','Authorization':'Bearer '+token()},
       body:JSON.stringify({
         run_at:document.getElementById('scheduleTime').value,
-        start_date:document.getElementById('scheduleStartDate').value || null,
-        end_date:document.getElementById('scheduleEndDate').value || null,
+        start_date:document.getElementById('scheduleStartDate').value||null,
+        end_date:document.getElementById('scheduleEndDate').value||null,
         action:document.getElementById('scheduleAction').value,
         prompt:document.getElementById('schedulePrompt').value
       })
@@ -365,13 +356,13 @@ async function loadSchedules(){
   const d=await r.json();
   ul.innerHTML='';
   d.forEach(s=>{
-    ul.insertAdjacentHTML('beforeend',`<li>${s.action} at ${s.run_at} (${s.start_date||'—'} → ${s.end_date||'—'}) for account ${s.account_id}</li>`);
+    ul.insertAdjacentHTML('beforeend',`<li>${s.action} • ${s.account_name||s.account_id} • ${s.niche||'—'} • ${s.start_date||'—'} → ${s.end_date||'—'}</li>`);
   });
 }
 
 // --- Init ---
 async function initAfterLogin(){await loadModes();await refreshStats();}
-(async function boot(){if(token()){setWho(parseJwt(token())?.sub??'');show('dashboard');initAfterLogin();}else show('login');})();
+(async function boot(){if(token()){setWho("User");show('dashboard');initAfterLogin();}else show('login');})();
 </script>
 </body>
 </html>
