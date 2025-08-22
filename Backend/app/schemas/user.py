@@ -1,31 +1,16 @@
 from pydantic import BaseModel, EmailStr
-from datetime import datetime
-from typing import Optional
 
-# Base properties
 class UserBase(BaseModel):
     email: EmailStr
-    username: str
-    is_active: Optional[bool] = True
-    is_superuser: Optional[bool] = False
+    is_active: bool
+    is_admin: bool
 
-# Properties to receive via API on creation
-class UserCreate(UserBase):
+class UserCreate(BaseModel):
+    email: EmailStr
     password: str
+    is_admin: bool = False
 
-# Properties to receive via API on update
-class UserUpdate(UserBase):
-    password: Optional[str] = None
-
-# Properties to return via API (never return the password!)
-class User(UserBase):
+class UserOut(UserBase):
     id: int
-    created_at: datetime
-    last_login: Optional[datetime] = None
-
     class Config:
-        from_attributes = True  # Allows ORM mode
-
-# Properties stored in database
-class UserInDB(User):
-    hashed_password: str
+        from_attributes = True

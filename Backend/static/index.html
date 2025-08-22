@@ -1,0 +1,347 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>RedditBot Admin</title>
+<link href="https://unpkg.com/@picocss/pico@2/css/pico.min.css" rel="stylesheet">
+<style>
+  body { max-width: 1100px; margin: 2rem auto; }
+  .hidden { display: none; }
+  .card { padding: 1rem; border: 1px solid #eee; border-radius: 10px; }
+  .grid-2 { display:grid; grid-template-columns: 1fr 1fr; gap: 1rem; }
+  nav a { margin-right: .75rem; }
+  .pill { padding: .25rem .6rem; border-radius: 20px; font-size: .8rem; background:#eef; }
+  .success { color: #0a0; }
+  .error { color: #a00; }
+  table td, table th { vertical-align: middle; }
+</style>
+</head>
+<body>
+
+<header class="card">
+  <h2>RedditBot Admin</h2>
+  <nav id="nav" class="hidden">
+    <a href="#" data-view="dashboard">Dashboard</a>
+    <a href="#" data-view="accounts">Reddit Accounts</a>
+    <a href="#" data-view="add">Add Reddit Account</a>
+    <a href="#" data-view="schedule">Schedules</a>
+    <span id="who" class="pill"></span>
+    <button id="logoutBtn" class="secondary">Logout</button>
+  </nav>
+</header>
+
+<main>
+  <!-- Login -->
+  <section id="view-login" class="card">
+    <h3>Admin Login</h3>
+    <form id="loginForm">
+      <div class="grid-2">
+        <label>Email <input type="email" name="email" required /></label>
+        <label>Password <input type="password" name="password" required /></label>
+      </div>
+      <button type="submit">Login</button>
+    </form>
+    <p id="loginMsg"></p>
+  </section>
+
+  <!-- Dashboard -->
+  <section id="view-dashboard" class="card hidden">
+    <h3>Dashboard</h3>
+    <article class="card">
+      <h5>Bot Modes</h5>
+      <div class="grid-2">
+        <label><input type="checkbox" id="modeCommenting"> Enable Commenting</label>
+        <label><input type="checkbox" id="modePosting"> Enable Posting</label>
+      </div>
+      <div class="grid-2" style="margin-top:.75rem;">
+        <button id="saveModesBtn">Save Modes</button>
+        <span id="modesMsg"></span>
+      </div>
+    </article>
+    <article class="card">
+      <h5>Quick Stats</h5>
+      <table>
+        <tbody>
+          <tr><td>Linked Accounts</td><td id="statAccounts">—</td></tr>
+          <tr><td>Commenting</td><td id="statCommenting">—</td></tr>
+          <tr><td>Posting</td><td id="statPosting">—</td></tr>
+        </tbody>
+      </table>
+    </article>
+  </section>
+
+  <!-- Accounts -->
+  <section id="view-accounts" class="card hidden">
+    <h3>Your Reddit Accounts</h3>
+    <table>
+      <thead><tr><th>#</th><th>Username</th><th>Niche</th><th>Expires</th><th>Actions</th></tr></thead>
+      <tbody id="accountsTbody"><tr><td colspan="5">Loading…</td></tr></tbody>
+    </table>
+    <p id="accountsMsg"></p>
+  </section>
+
+  <!-- Add -->
+  <section id="view-add" class="card hidden">
+    <h3>Add Reddit Account</h3>
+    <p>Click to open Reddit login in a popup. Once complete, the popup will close automatically.</p>
+    <button id="getAuthUrlBtn">Link Reddit Account</button>
+    <p id="addMsg"></p>
+  </section>
+
+  <!-- Schedules -->
+  <section id="view-schedule" class="card hidden">
+    <h3>Schedules</h3>
+    <form id="scheduleForm">
+      <label>Reddit Account
+        <select id="scheduleAccount"></select>
+      </label>
+      <label>Run At
+        <input type="datetime-local" id="scheduleTime" required />
+      </label>
+      <label>Action
+        <select id="scheduleAction">
+          <option value="comment">Comment</option>
+          <option value="post">Post</option>
+        </select>
+      </label>
+      <label>Prompt (optional)
+        <textarea id="schedulePrompt"></textarea>
+      </label>
+      <button type="submit">Save Schedule</button>
+    </form>
+    <p id="scheduleMsg"></p>
+    <h5>Your Schedules</h5>
+    <ul id="scheduleList"></ul>
+  </section>
+</main>
+
+<footer style="margin-top:2rem;text-align:center;color:#666;">
+  <small>RedditBot Admin • FastAPI</small>
+</footer>
+
+<script>
+const API_BASE='http://localhost:8000';
+function token(){return localStorage.getItem('access_token')||'';}
+function setToken(t){localStorage.setItem('access_token',t);}
+function clearToken(){localStorage.removeItem('access_token');}
+function parseJwt(t){try{return JSON.parse(atob(t.split('.')[1]));}catch{return null;}}
+function setWho(sub){document.getElementById('who').textContent=sub?('UserID: '+sub):'';}
+
+const views={
+  login:document.getElementById('view-login'),
+  dashboard:document.getElementById('view-dashboard'),
+  accounts:document.getElementById('view-accounts'),
+  add:document.getElementById('view-add'),
+  schedule:document.getElementById('view-schedule')
+};
+const nav=document.getElementById('nav');
+function show(v){
+  Object.values(views).forEach(x=>x.classList.add('hidden'));
+  views[v].classList.remove('hidden');
+  if(v!=='login')nav.classList.remove('hidden');else nav.classList.add('hidden');
+}
+
+// --- Login ---
+document.getElementById('loginForm').addEventListener('submit',async e=>{
+  e.preventDefault();
+  const msg=document.getElementById('loginMsg');
+  msg.textContent='Logging in…';
+  const form=new FormData(e.target);
+  try{
+    const res=await fetch(`${API_BASE}/auth/login`,{
+      method:'POST',headers:{'Content-Type':'application/json'},
+      body:JSON.stringify({email:form.get('email'),password:form.get('password')})
+    });
+    const data=await res.json();
+    if(!res.ok)throw new Error(data.detail||'Login failed');
+    setToken(data.access_token);
+    setWho(parseJwt(data.access_token)?.sub??'');
+    msg.textContent='Logged in.';
+    await initAfterLogin();
+    show('dashboard');
+  }catch(err){msg.innerHTML=`<span class="error">${err.message}</span>`;}
+});
+document.getElementById('logoutBtn').addEventListener('click',()=>{clearToken();setWho('');show('login');});
+
+// --- Nav ---
+document.querySelectorAll('nav a[data-view]').forEach(a=>a.addEventListener('click',e=>{
+  e.preventDefault();show(a.dataset.view);
+  if(a.dataset.view==='accounts')loadAccounts();
+  if(a.dataset.view==='dashboard')refreshStats();
+  if(a.dataset.view==='schedule'){loadScheduleAccounts();loadSchedules();}
+}));
+
+// --- Modes ---
+const modeCommenting=document.getElementById('modeCommenting'),
+      modePosting=document.getElementById('modePosting'),
+      modesMsg=document.getElementById('modesMsg');
+async function loadModes(){
+  try{
+    const r=await fetch(`${API_BASE}/user/settings`,{headers:{Authorization:'Bearer '+token()}});
+    if(r.ok){const s=await r.json();
+      modeCommenting.checked=!!s.commenting_enabled;
+      modePosting.checked=!!s.posting_enabled;return;}
+  }catch{}
+  modeCommenting.checked=localStorage.getItem('mode_commenting')==='1';
+  modePosting.checked=localStorage.getItem('mode_posting')==='1';
+}
+async function saveModes(){
+  modesMsg.textContent='Saving…';
+  try{
+    const r=await fetch(`${API_BASE}/user/settings`,{
+      method:'PUT',
+      headers:{'Content-Type':'application/json',Authorization:'Bearer '+token()},
+      body:JSON.stringify({commenting_enabled:modeCommenting.checked,posting_enabled:modePosting.checked})
+    });
+    if(r.ok){modesMsg.innerHTML='<span class="success">Saved.</span>';return;}
+  }catch{}
+  localStorage.setItem('mode_commenting',modeCommenting.checked?'1':'0');
+  localStorage.setItem('mode_posting',modePosting.checked?'1':'0');
+  modesMsg.innerHTML='<span class="success">Saved (local).</span>';
+}
+document.getElementById('saveModesBtn').addEventListener('click',saveModes);
+
+// --- Stats ---
+async function refreshStats(){
+  let count='—';
+  try{
+    const r=await fetch(`${API_BASE}/reddit/accounts`,{headers:{Authorization:'Bearer '+token()}});
+    if(r.ok)count=(await r.json()).length;
+  }catch{}
+  document.getElementById('statAccounts').textContent=count;
+  document.getElementById('statCommenting').textContent=modeCommenting.checked?'On':'Off';
+  document.getElementById('statPosting').textContent=modePosting.checked?'On':'Off';
+}
+
+// --- Accounts ---
+async function loadAccounts(){
+  const tb=document.getElementById('accountsTbody'),msg=document.getElementById('accountsMsg');
+  tb.innerHTML='<tr><td colspan="5">Loading…</td></tr>';
+  try{
+    const r=await fetch(`${API_BASE}/reddit/accounts`,{headers:{Authorization:'Bearer '+token()}});
+    const d=await r.json();
+    if(!r.ok)throw new Error(d.detail||'Failed');
+    if(!d.length){tb.innerHTML='<tr><td colspan="5">No accounts.</td></tr>';return;}
+    tb.innerHTML='';
+    d.forEach((acc,i)=>{
+      tb.insertAdjacentHTML('beforeend',
+        `<tr>
+           <td>${i+1}</td>
+           <td>${acc.username}</td>
+           <td>
+             <input type="text" value="${acc.niche||''}" data-niche="${acc.id}" style="width:120px"/>
+             <button data-save-niche="${acc.id}">Save</button>
+           </td>
+           <td>${new Date(acc.token_expires_at).toLocaleString()}</td>
+           <td><button data-refresh="${acc.id}">Refresh</button></td>
+         </tr>`);
+    });
+    // refresh token
+    tb.querySelectorAll('button[data-refresh]').forEach(b=>b.addEventListener('click',async()=>{
+      try{b.disabled=true;
+        await fetch(`${API_BASE}/reddit/accounts/${b.dataset.refresh}/refresh`,{method:'POST',headers:{Authorization:'Bearer '+token()}});
+        await loadAccounts();
+        msg.innerHTML='<span class="success">Refreshed.</span>';
+      }catch(e){msg.innerHTML=`<span class="error">${e.message}</span>`;}
+      finally{b.disabled=false;}
+    }));
+    // save niche
+    tb.querySelectorAll('button[data-save-niche]').forEach(btn=>btn.addEventListener('click',async()=>{
+      const accId=btn.dataset.saveNiche;
+      const niche=tb.querySelector(`input[data-niche="${accId}"]`).value;
+      try{
+        const r=await fetch(`${API_BASE}/reddit/accounts/${accId}/niche`,{
+          method:'PUT',
+          headers:{'Content-Type':'application/json',Authorization:'Bearer '+token()},
+          body:JSON.stringify({niche})
+        });
+        if(!r.ok)throw new Error('Failed to save niche');
+        msg.innerHTML='<span class="success">Niche updated.</span>';
+      }catch(e){msg.innerHTML=`<span class="error">${e.message}</span>`;}
+    }));
+  }catch(e){
+    tb.innerHTML='<tr><td colspan="5">Error</td></tr>';
+    msg.innerHTML=`<span class="error">${e.message}</span>`;
+  }
+}
+
+// --- OAuth popup ---
+async function getAuthUrl(){
+  const redirectUri="http://localhost:8000/reddit_popup.html";
+  const r=await fetch(`${API_BASE}/reddit/authorize?redirect_uri=${encodeURIComponent(redirectUri)}`,{headers:{Authorization:'Bearer '+token()}});
+  const d=await r.json();if(!r.ok)throw new Error(d.detail||'Failed');
+  return d.auth_url;
+}
+document.getElementById('getAuthUrlBtn').addEventListener('click',async()=>{
+  const msg=document.getElementById('addMsg');msg.textContent='Redirecting to Reddit…';
+  try{const url=await getAuthUrl();window.location.href=url;}
+  catch(e){msg.innerHTML=`<span class="error">${e.message}</span>`;}
+});
+
+// --- Handle OAuth callback ---
+window.addEventListener('DOMContentLoaded',async()=>{
+  const params=new URLSearchParams(window.location.search);
+  const code=params.get('code');const state=params.get('state');
+  if(code&&state){
+    const msg=document.getElementById('addMsg');msg.textContent='Exchanging code…';
+    try{
+      const res=await fetch(`${API_BASE}/reddit/callback?code=${encodeURIComponent(code)}&state=${encodeURIComponent(state)}`,{headers:{Authorization:'Bearer '+token()}});
+      const data=await res.json();if(!res.ok)throw new Error(data.detail||'Callback failed');
+      const linkRes=await fetch(`${API_BASE}/reddit/link_account`,{
+        method:'POST',
+        headers:{'Content-Type':'application/json','Authorization':'Bearer '+token()},
+        body:JSON.stringify({username:data.username,access_token:data.access_token,refresh_token:data.refresh_token,expires_in:data.expires_in})
+      });
+      const linked=await linkRes.json();if(!linkRes.ok)throw new Error(linked.detail||'Link failed');
+      msg.innerHTML=`<span class="success">✅ Connected as <b>${linked.username}</b>.</span>`;
+      loadAccounts();
+    }catch(e){msg.innerHTML=`<span class="error">${e.message}</span>`;}
+    history.replaceState(null,'',window.location.pathname);
+  }
+});
+
+// --- Schedule ---
+async function loadScheduleAccounts(){
+  const sel=document.getElementById('scheduleAccount');
+  sel.innerHTML='';
+  const r=await fetch(`${API_BASE}/reddit/accounts`,{headers:{Authorization:'Bearer '+token()}});
+  const d=await r.json();
+  d.forEach(acc=>{
+    sel.insertAdjacentHTML('beforeend',`<option value="${acc.id}">${acc.username}</option>`);
+  });
+}
+document.getElementById('scheduleForm').addEventListener('submit',async e=>{
+  e.preventDefault();const msg=document.getElementById('scheduleMsg');
+  try{
+    const res=await fetch(`${API_BASE}/schedule/${document.getElementById('scheduleAccount').value}`,{
+      method:'POST',
+      headers:{'Content-Type':'application/json','Authorization':'Bearer '+token()},
+      body:JSON.stringify({
+        run_at:document.getElementById('scheduleTime').value,
+        action:document.getElementById('scheduleAction').value,
+        prompt:document.getElementById('schedulePrompt').value
+      })
+    });
+    const d=await res.json();
+    if(!res.ok)throw new Error(d.detail||'Failed');
+    msg.innerHTML='<span class="success">✅ Saved schedule.</span>';
+    loadSchedules();
+  }catch(e){msg.innerHTML=`<span class="error">${e.message}</span>`;}
+});
+async function loadSchedules(){
+  const ul=document.getElementById('scheduleList');
+  const r=await fetch(`${API_BASE}/schedule/`,{headers:{Authorization:'Bearer '+token()}});
+  const d=await r.json();
+  ul.innerHTML='';
+  d.forEach(s=>{
+    ul.insertAdjacentHTML('beforeend',`<li>${s.action} at ${s.run_at} for account ${s.account_id}</li>`);
+  });
+}
+
+// --- Init ---
+async function initAfterLogin(){await loadModes();await refreshStats();}
+(async function boot(){if(token()){setWho(parseJwt(token())?.sub??'');show('dashboard');initAfterLogin();}else show('login');})();
+</script>
+</body>
+</html>
