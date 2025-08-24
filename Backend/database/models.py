@@ -1,4 +1,4 @@
-from datetime import datetime
+from datetime import datetime, date
 
 from sqlalchemy import String, Integer, Boolean, ForeignKey, Text, DateTime, func, Date
 from sqlalchemy.orm import Mapped, mapped_column, relationship
@@ -43,8 +43,8 @@ class RedditSchedule(Base):
     account_id: Mapped[int] = mapped_column(ForeignKey("reddit_accounts.id", ondelete="CASCADE"), index=True)
 
     run_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
-    start_date: Mapped[datetime] = mapped_column(Date, nullable=True)
-    end_date: Mapped[datetime] = mapped_column(Date, nullable=True)
+    start_date: Mapped[date] = mapped_column(Date, nullable=True)
+    end_date: Mapped[date] = mapped_column(Date, nullable=True)
 
     action: Mapped[str] = mapped_column(String(20), default="comment")
     prompt: Mapped[str] = mapped_column(Text, nullable=True)

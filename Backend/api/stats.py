@@ -1,53 +1,61 @@
-from fastapi import APIRouter, Depends
+from fastapi import APIRouter, Depends, Query
 from sqlalchemy.orm import Session
+
 from database.db import get_db
-from database.models import RedditAccount, RedditComment, RedditPost, User
+from database.models import RedditAccount, RedditPost, RedditComment, User
 from core.jwt import get_current_user
-from datetime import datetime, timedelta
 
-router = APIRouter(prefix="/stats", tags=["stats"])
+router = APIRouter()
 
-@router.get("/account/{account_id}")
-def account_stats(account_id: int, days: int = 7, db: Session = Depends(get_db),
-                  current_user: User = Depends(get_current_user)):
+@router.get("/stats/{account_id}")
+def account_stats(
+    account_id: int,
+    page: int = Query(1, ge=1),
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user)
+):
     acc = db.query(RedditAccount).filter_by(id=account_id, owner_id=current_user.id).first()
     if not acc:
         return {"error": "Account not found"}
 
-    since = datetime.utcnow() - timedelta(days=days)
+    limit = 10
+    offset = (page - 1) * limit
 
-    comments = db.query(RedditComment).filter(
-        RedditComment.account_id == acc.id,
-        RedditComment.created_utc >= since.timestamp()
-    ).all()
+    posts = (
+        db.query(RedditPost, RedditComment)
+        .join(RedditComment, RedditComment.reddit_id == RedditPost.reddit_id)
+        .filter(RedditPost.account_id == acc.id)
+        .order_by(RedditPost.id.desc())
+        .offset(offset)
+        .limit(limit)
+        .all()
+    )
 
-    posts = db.query(RedditPost).filter(
-        RedditPost.account_id == acc.id,
-        RedditPost.created_utc >= since.timestamp()
-    ).all()
+    posts_data = [
+        {
+            "reddit_id": p.reddit_id,
+            "url": p.url,
+            "title": p.title,
+            "body": p.body,
+            "created_utc": p.created_utc,
+            "comment": c.body
+        }
+        for p, c in posts
+    ]
+
+    total_posts = (
+        db.query(RedditPost)
+        .join(RedditComment, RedditComment.reddit_id == RedditPost.reddit_id)
+        .filter(RedditPost.account_id == acc.id)
+        .count()
+    )
 
     return {
         "account_id": acc.id,
         "username": acc.username,
-        "comments_count": len(comments),
-        "posts_count": len(posts),
-        "posts": [
-            {
-                "id": p.id,
-                "reddit_id": p.reddit_id,
-                "title": p.title,
-                "body": p.body,
-                "created_utc": p.created_utc,
-            }
-            for p in posts
-        ],
-        "comments": [
-            {
-                "id": c.id,
-                "reddit_id": c.reddit_id,
-                "body": c.body,
-                "created_utc": c.created_utc,
-            }
-            for c in comments
-        ]
+        "page": page,
+        "per_page": limit,
+        "total_posts": total_posts,
+        "total_pages": (total_posts + limit - 1) // limit,
+        "posts": posts_data
     }

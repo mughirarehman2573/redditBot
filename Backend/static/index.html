@@ -400,7 +400,7 @@ async function loadAccounts(){
 async function loadAccountStats(accountId, canvasId){
   try {
     const API_BASE = await ensureApiBase();
-    const r = await fetch(`${API_BASE}/stats/account/${accountId}`, {
+    const r = await fetch(`${API_BASE}/stats/${accountId}`, {
       headers:{Authorization:'Bearer '+token()}
     });
     const d = await r.json();
