@@ -125,8 +125,91 @@
     color: #7f8c8d;
     margin-top: 0.5rem;
   }
+  .pagination {
+    display: flex;
+    justify-content: center;
+    margin-top: 1rem;
+    gap: 0.5rem;
+  }
+  .pagination button {
+    padding: 0.5rem 1rem;
+    border: 1px solid #ddd;
+    background: white;
+    cursor: pointer;
+    border-radius: 4px;
+  }
+  .pagination button.active {
+    background: #2575fc;
+    color: white;
+    border-color: #2575fc;
+  }
+  .activity-item {
+    border: 1px solid #e0e0e0;
+    border-radius: 8px;
+    padding: 1rem;
+    margin-bottom: 1rem;
+    background: white;
+  }
+  .activity-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: flex-start;
+    margin-bottom: 0.5rem;
+  }
+  .post-link {
+    color: #2575fc;
+    text-decoration: none;
+    font-weight: 500;
+  }
+  .post-link:hover {
+    text-decoration: underline;
+  }
+  .post-content {
+    margin: 0.5rem 0;
+    color: #555;
+  }
+  .comment-content {
+    background: #f8f9fa;
+    padding: 0.75rem;
+    border-radius: 6px;
+    border-left: 3px solid #2575fc;
+    margin-top: 0.5rem;
+  }
+  .empty-state {
+    text-align: center;
+    padding: 2rem;
+    color: #777;
+  }
+  .pagination-info {
+    text-align: center;
+    margin: 1rem 0;
+    font-weight: 500;
+    color: #555;
+  }
+  .pagination-controls {
+    display: flex;
+    justify-content: center;
+    gap: 1rem;
+    margin: 1rem 0;
+  }
+  .pagination-controls button {
+    padding: 0.5rem 1rem;
+    border: 1px solid #2575fc;
+    background: white;
+    color: #2575fc;
+    cursor: pointer;
+    border-radius: 4px;
+    font-weight: 500;
+  }
+  .pagination-controls button:disabled {
+    opacity: 0.5;
+    cursor: not-allowed;
+  }
+  .pagination-controls button:hover:not(:disabled) {
+    background: #2575fc;
+    color: white;
+  }
 </style>
-<script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
 </head>
 <body>
 
@@ -189,8 +272,8 @@
   <section id="view-accounts" class="card hidden">
     <h3>👤 Your Reddit Accounts</h3>
     <table>
-      <thead><tr><th>#</th><th>Username</th><th>Niche</th><th>Expires</th><th>Stats</th></tr></thead>
-      <tbody id="accountsTbody"><tr><td colspan="5">Loading…</td></tr></tbody>
+      <thead><tr><th>#</th><th>Username</th><th>Niche</th><th>Expires</th></tr></thead>
+      <tbody id="accountsTbody"><tr><td colspan="4">Loading…</td></tr></tbody>
     </table>
     <p id="accountsMsg"></p>
   </section>
@@ -204,7 +287,7 @@
   <!-- Add -->
   <section id="view-add" class="card hidden">
     <h3>➕ Add Reddit Account</h3>
-    <p>Click below to open Reddit login. After completing, you’ll be redirected back here automatically.</p>
+    <p>Click below to open Reddit login. After completing, you'll be redirected back here automatically.</p>
     <button id="getAuthUrlBtn" class="primary">Link Reddit Account</button>
     <p id="addMsg"></p>
   </section>
@@ -354,16 +437,15 @@ async function refreshStats(){
 // --- Accounts ---
 async function loadAccounts(){
   const tb=document.getElementById('accountsTbody'),msg=document.getElementById('accountsMsg');
-  tb.innerHTML='<tr><td colspan="5">Loading…</td></tr>';
+  tb.innerHTML='<tr><td colspan="4">Loading…</td></tr>';
   try{
     const API_BASE = await ensureApiBase();
     const r=await fetch(`${API_BASE}/reddit/accounts`,{headers:{Authorization:'Bearer '+token()}});
     const accounts=await r.json();
     if(!r.ok)throw new Error(accounts.detail||'Failed');
-    if(!accounts.length){tb.innerHTML='<tr><td colspan="5">No accounts.</td></tr>';return;}
+    if(!accounts.length){tb.innerHTML='<tr><td colspan="4">No accounts.</td></tr>';return;}
     tb.innerHTML='';
     accounts.forEach((acc,i)=>{
-      const rowId=`chart-${acc.id}`;
       tb.insertAdjacentHTML('beforeend',
         `<tr>
            <td>${i+1}</td>
@@ -371,12 +453,7 @@ async function loadAccounts(){
            <td><input type="text" value="${acc.niche||''}" data-niche="${acc.id}" style="width:120px"/>
              <button data-save-niche="${acc.id}">Save</button></td>
            <td>${new Date(acc.token_expires_at).toLocaleString()}</td>
-           <td><canvas id="${rowId}" width="120" height="80"></canvas></td>
-         </tr>
-         <tr id="account-details-${acc.id}-row" style="display: none;">
-           <td colspan="5" id="account-details-${acc.id}"></td>
          </tr>`);
-      loadAccountStats(acc.id,rowId);
     });
     tb.querySelectorAll('button[data-save-niche]').forEach(btn=>{
       btn.addEventListener('click',async()=>{
@@ -393,78 +470,10 @@ async function loadAccounts(){
       });
     });
   }catch(e){
-    tb.innerHTML='<tr><td colspan="5">Error</td></tr>';
+    tb.innerHTML='<tr><td colspan="4">Error</td></tr>';
     msg.innerHTML=`<span class="error">${e.message}</span>`;
   }
 }
-async function loadAccountStats(accountId, canvasId){
-  try {
-    const API_BASE = await ensureApiBase();
-    const r = await fetch(`${API_BASE}/stats/${accountId}`, {
-      headers:{Authorization:'Bearer '+token()}
-    });
-    const d = await r.json();
-    if(!r.ok || d.error) return;
-
-    // Chart
-    new Chart(document.getElementById(canvasId).getContext('2d'),{
-      type:'pie',
-      data:{
-        labels:['Comments','Posts'],
-        datasets:[{data:[d.comments_count,d.posts_count],backgroundColor:['#4e79a7','#f28e2b']}]
-      },
-      options:{plugins:{legend:{position:'bottom'}}}
-    });
-
-    // Add click event to show details
-    document.getElementById(canvasId).style.cursor = 'pointer';
-    document.getElementById(canvasId).addEventListener('click', function() {
-      const detailsRow = document.getElementById(`account-details-${accountId}-row`);
-      detailsRow.style.display = detailsRow.style.display === 'none' ? 'table-row' : 'none';
-    });
-
-    // Format dates for display
-    const formatDate = (timestamp) => {
-      return new Date(timestamp * 1000).toLocaleDateString();
-    };
-
-    // Populate with detailed stats
-    const container = document.getElementById(`account-details-${accountId}`);
-    container.innerHTML = `
-      <div class="stats-details">
-        <h4>Detailed Statistics for ${d.username}</h4>
-        <div class="grid-2">
-          <div>
-            <h5>Posts (${d.posts_count})</h5>
-            <div style="max-height: 300px; overflow-y: auto;">
-              ${d.posts.map(p => `
-                <div class="post-item">
-                  <div class="post-title">${p.title}</div>
-                  ${p.body ? `<div>${p.body.substring(0, 100)}${p.body.length > 100 ? '...' : ''}</div>` : ''}
-                  <div class="timestamp">Posted on: ${formatDate(p.created_utc)}</div>
-                </div>
-              `).join('')}
-            </div>
-          </div>
-          <div>
-            <h5>Comments (${d.comments_count})</h5>
-            <div style="max-height: 300px; overflow-y: auto;">
-              ${d.comments.map(c => `
-                <div class="comment-item">
-                  <div class="comment-body">${c.body.substring(0, 150)}${c.body.length > 150 ? '...' : ''}</div>
-                  <div class="timestamp">Posted on: ${formatDate(c.created_utc)}</div>
-                </div>
-              `).join('')}
-            </div>
-          </div>
-        </div>
-      </div>
-    `;
-  } catch(e){
-    console.error('Stats error', e);
-  }
-}
-
 
 // --- Global Stats ---
 async function loadStats(){
@@ -475,14 +484,118 @@ async function loadStats(){
     const r=await fetch(`${API_BASE}/reddit/accounts`,{headers:{Authorization:'Bearer '+token()}});
     const accounts=await r.json();
     if(!accounts.length){container.innerHTML='No accounts.';return;}
-    container.innerHTML='';
+
+    container.innerHTML='<h4>Select an account to view activity history:</h4>';
+
     for(const acc of accounts){
-      const div=document.createElement('div');div.className='card';
-      div.innerHTML=`<h4>${acc.username} (${acc.niche||'No niche'})</h4><canvas id="stats-chart-${acc.id}" height="150"></canvas>`;
+      const div=document.createElement('div');
+      div.className='card';
+      div.style.cursor = 'pointer';
+      div.onclick = () => viewAccountStats(acc.id, acc.username);
+      div.innerHTML=`
+        <h4>${acc.username}</h4>
+        <p>Niche: ${acc.niche||'No niche specified'}</p>
+        <p>Click to view activity history</p>
+      `;
       container.appendChild(div);
-      loadAccountStats(acc.id,`stats-chart-${acc.id}`);
     }
-  }catch{container.innerHTML='Error loading stats.';}
+  }catch(e){
+    console.error('Error loading stats:', e);
+    container.innerHTML='Error loading account information.';
+  }
+}
+
+// View account stats in the stats section
+async function viewAccountStats(accountId, username, page = 1) {
+  const container = document.getElementById('statsContainer');
+  container.innerHTML = '<div style="text-align: center; padding: 2rem;">Loading activity history...</div>';
+
+  try {
+    const API_BASE = await ensureApiBase();
+    const r = await fetch(`${API_BASE}/stats/${accountId}?page=${page}`, {
+      headers: {Authorization: 'Bearer ' + token()}
+    });
+    const data = await r.json();
+
+    if (!r.ok || data.error) {
+      container.innerHTML = `<div class="error">Error loading history: ${data.error || 'Unknown error'}</div>`;
+      return;
+    }
+
+    // Format dates for display
+    const formatDate = (timestamp) => {
+      return new Date(timestamp * 1000).toLocaleString();
+    };
+
+    // Create activity history display
+    let html = `
+      <div style="margin-bottom: 1rem;">
+        <button onclick="loadStats()" style="background: #ddd; border: none; padding: 0.5rem 1rem; border-radius: 4px; margin-bottom: 1rem;">
+          ← Back to Accounts
+        </button>
+        <h4>Activity History for ${username}</h4>
+
+        <!-- Pagination Info -->
+        <div class="pagination-info">
+          Showing page ${data.page} of ${data.total_pages} (${data.total_posts} total posts with comments)
+        </div>
+
+        <!-- Pagination Controls -->
+        <div class="pagination-controls">
+          <button onclick="viewAccountStats(${accountId}, '${username}', ${data.page - 1})"
+                  ${data.page <= 1 ? 'disabled' : ''}>
+            ← Previous
+          </button>
+          <button onclick="viewAccountStats(${accountId}, '${username}', ${data.page + 1})"
+                  ${data.page >= data.total_pages ? 'disabled' : ''}>
+            Next →
+          </button>
+        </div>
+      </div>
+    `;
+
+    if (data.posts && data.posts.length > 0) {
+      data.posts.forEach(post => {
+        html += `
+          <div class="activity-item">
+            <div class="activity-header">
+              <a href="${post.url}" target="_blank" class="post-link">${post.title || 'Untitled Post'}</a>
+              <span class="timestamp">${formatDate(post.created_utc)}</span>
+            </div>
+
+            ${post.body ? `<div class="post-content">${post.body}</div>` : ''}
+
+            <div class="comment-content">
+              <strong>Our Comment:</strong>
+              <div class="comment-body">${post.comment}</div>
+            </div>
+          </div>
+        `;
+      });
+
+      // Add pagination controls at the bottom too
+      html += `
+        <div class="pagination-controls" style="margin-top: 2rem;">
+          <button onclick="viewAccountStats(${accountId}, '${username}', ${data.page - 1})"
+                  ${data.page <= 1 ? 'disabled' : ''}>
+            ← Previous
+          </button>
+          <button onclick="viewAccountStats(${accountId}, '${username}', ${data.page + 1})"
+                  ${data.page >= data.total_pages ? 'disabled' : ''}>
+            Next →
+          </button>
+        </div>
+      `;
+    } else {
+      html += `<div class="empty-state">No activity found for this account.</div>`;
+    }
+
+    container.innerHTML = html;
+
+  } catch (e) {
+    console.error('Error loading account stats:', e);
+    container.innerHTML = `<div class="error">Failed to load activity history: ${e.message}</div>`;
+  }
 }
 
 // --- OAuth ---
