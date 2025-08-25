@@ -209,6 +209,42 @@
     background: #2575fc;
     color: white;
   }
+  .schedule-item {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 0.75rem;
+    margin-bottom: 0.5rem;
+    background: white;
+    border-radius: 6px;
+    border: 1px solid #e9ecef;
+  }
+  .schedule-actions {
+    display: flex;
+    gap: 0.5rem;
+  }
+  .edit-form {
+    margin-top: 1rem;
+    padding: 1rem;
+    background: #f8f9fa;
+    border-radius: 6px;
+    border-left: 3px solid #2575fc;
+  }
+  .account-actions {
+    display: flex;
+    gap: 0.5rem;
+  }
+  .delete-account-btn {
+    background: #dc3545;
+    color: white;
+    border: none;
+    padding: 0.25rem 0.5rem;
+    border-radius: 4px;
+    cursor: pointer;
+  }
+  .delete-account-btn:hover {
+    background: #c82333;
+  }
 </style>
 </head>
 <body>
@@ -272,8 +308,8 @@
   <section id="view-accounts" class="card hidden">
     <h3>👤 Your Reddit Accounts</h3>
     <table>
-      <thead><tr><th>#</th><th>Username</th><th>Niche</th><th>Expires</th></tr></thead>
-      <tbody id="accountsTbody"><tr><td colspan="4">Loading…</td></tr></tbody>
+      <thead><tr><th>#</th><th>Username</th><th>Niche</th><th>Expires</th><th>Actions</th></tr></thead>
+      <tbody id="accountsTbody"><tr><td colspan="5">Loading…</td></tr></tbody>
     </table>
     <p id="accountsMsg"></p>
   </section>
@@ -311,7 +347,7 @@
     </form>
     <p id="scheduleMsg"></p>
     <h5>Your Schedules</h5>
-    <ul id="scheduleList" style="list-style:none;padding:0;"></ul>
+    <div id="scheduleList"></div>
   </section>
 </main>
 
@@ -388,7 +424,7 @@ document.getElementById('logoutBtn').addEventListener('click',()=>{
 });
 
 // --- Nav ---
-document.querySelectorAll('nav a[data-view]').forEach(a=>{
+document.querySelectorAll('nav a[data-view]').forEach(a => {
   a.addEventListener('click',e=>{
     e.preventDefault();show(a.dataset.view);
     if(a.dataset.view==='accounts')loadAccounts();
@@ -427,23 +463,46 @@ async function refreshStats(){
   try{
     const API_BASE = await ensureApiBase();
     const r=await fetch(`${API_BASE}/stats/accounts`,{headers:{Authorization:'Bearer '+token()}});
-    if(r.ok)count=(await r.json()).length;
+  if(r.ok)count=(await r.json()).length;
   }catch{}
   document.getElementById('statAccounts').textContent=count;
   document.getElementById('statCommenting').textContent=modeCommenting.checked?'On':'Off';
   document.getElementById('statPosting').textContent=modePosting.checked?'On':'Off';
 }
 
+// --- Delete Account Function ---
+async function deleteAccount(accountId) {
+  try {
+    const API_BASE = await ensureApiBase();
+    const res = await fetch(`${API_BASE}/reddit/accounts/${accountId}`, {
+      method: 'DELETE',
+      headers: {
+        'Authorization': 'Bearer ' + token()
+      }
+    });
+
+    if (!res.ok) {
+      const errorData = await res.json();
+      throw new Error(errorData.detail || 'Failed to delete account');
+    }
+
+    return { success: true, message: 'Account deleted successfully' };
+  } catch (error) {
+    console.error('Error deleting account:', error);
+    throw error;
+  }
+}
+
 // --- Accounts ---
 async function loadAccounts(){
   const tb=document.getElementById('accountsTbody'),msg=document.getElementById('accountsMsg');
-  tb.innerHTML='<tr><td colspan="4">Loading…</td></tr>';
+  tb.innerHTML='<tr><td colspan="5">Loading…</td></tr>';
   try{
     const API_BASE = await ensureApiBase();
     const r=await fetch(`${API_BASE}/reddit/accounts`,{headers:{Authorization:'Bearer '+token()}});
     const accounts=await r.json();
     if(!r.ok)throw new Error(accounts.detail||'Failed');
-    if(!accounts.length){tb.innerHTML='<tr><td colspan="4">No accounts.</td></tr>';return;}
+    if(!accounts.length){tb.innerHTML='<tr><td colspan="5">No accounts.</td></tr>';return;}
     tb.innerHTML='';
     accounts.forEach((acc,i)=>{
       tb.insertAdjacentHTML('beforeend',
@@ -453,8 +512,13 @@ async function loadAccounts(){
            <td><input type="text" value="${acc.niche||''}" data-niche="${acc.id}" style="width:120px"/>
              <button data-save-niche="${acc.id}">Save</button></td>
            <td>${new Date(acc.token_expires_at).toLocaleString()}</td>
+           <td class="account-actions">
+             <button class="delete-account-btn" data-delete-account="${acc.id}">Delete</button>
+           </td>
          </tr>`);
     });
+
+    // Add event listeners for niche saving
     tb.querySelectorAll('button[data-save-niche]').forEach(btn=>{
       btn.addEventListener('click',async()=>{
         const API_BASE = await ensureApiBase();
@@ -469,8 +533,26 @@ async function loadAccounts(){
         }catch(e){msg.innerHTML=`<span class="error">${e.message}</span>`;}
       });
     });
+
+    // Add event listeners for account deletion
+    tb.querySelectorAll('button[data-delete-account]').forEach(btn=>{
+      btn.addEventListener('click',async()=>{
+        const accId=btn.dataset.deleteAccount;
+        const username = btn.closest('tr').querySelector('td:nth-child(2)').textContent;
+
+        if(confirm(`Are you sure you want to delete the account "${username}"? This action cannot be undone.`)) {
+          try {
+            const result = await deleteAccount(accId);
+            msg.innerHTML='<span class="success">Account deleted successfully.</span>';
+            loadAccounts(); // Reload the accounts list
+          } catch(e) {
+            msg.innerHTML=`<span class="error">${e.message}</span>`;
+          }
+        }
+      });
+    });
   }catch(e){
-    tb.innerHTML='<tr><td colspan="4">Error</td></tr>';
+    tb.innerHTML='<tr><td colspan="5">Error</td></tr>';
     msg.innerHTML=`<span class="error">${e.message}</span>`;
   }
 }
@@ -568,6 +650,9 @@ async function viewAccountStats(accountId, username, page = 1) {
             <div class="comment-content">
               <strong>Our Comment:</strong>
               <div class="comment-body">${post.comment}</div>
+              <div class="timestamp">
+                <a href="${post.comment_url}" target="_blank">View comment on Reddit</a>
+              </div>
             </div>
           </div>
         `;
@@ -668,12 +753,182 @@ document.getElementById('scheduleForm').addEventListener('submit',async e=>{
     msg.innerHTML='<span class="success">✅ Saved schedule.</span>';loadSchedules();
   }catch(e){msg.innerHTML=`<span class="error">${e.message}</span>`;}
 });
+
+// Update schedule function
+async function updateSchedule(scheduleId, payload) {
+  try {
+    const API_BASE = await ensureApiBase();
+    const res = await fetch(`${API_BASE}/schedule/${scheduleId}`, {
+      method: 'PATCH',
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': 'Bearer ' + token()
+      },
+      body: JSON.stringify(payload)
+    });
+
+    const data = await res.json();
+    if (!res.ok) throw new Error(data.detail || 'Failed to update schedule');
+    return data;
+  } catch (error) {
+    console.error('Error updating schedule:', error);
+    throw error;
+  }
+}
+
+// Delete schedule function
+async function deleteSchedule(scheduleId) {
+  try {
+    const API_BASE = await ensureApiBase();
+    const res = await fetch(`${API_BASE}/schedule/${scheduleId}`, {
+      method: 'DELETE',
+      headers: {
+        'Authorization': 'Bearer ' + token()
+      }
+    });
+
+    if (!res.ok) throw new Error('Failed to delete schedule');
+    return true;
+  } catch (error) {
+    console.error('Error deleting schedule:', error);
+    throw error;
+  }
+}
+
 async function loadSchedules(){
-  const ul=document.getElementById('scheduleList');
-  const API_BASE = await ensureApiBase();
-  const r=await fetch(`${API_BASE}/schedule/`,{headers:{Authorization:'Bearer '+token()}});
-  const d=await r.json();
-  ul.innerHTML='';d.forEach(s=>{ul.insertAdjacentHTML('beforeend',`<li>${s.action} • ${s.account_name||s.account_id} • ${s.niche||'—'} • ${s.start_date||'—'} → ${s.end_date||'—'}</li>`);});
+  const container = document.getElementById('scheduleList');
+  container.innerHTML = 'Loading schedules...';
+
+  try {
+    const API_BASE = await ensureApiBase();
+    const r = await fetch(`${API_BASE}/schedule/`, {
+      headers: {Authorization: 'Bearer ' + token()}
+    });
+    const schedules = await r.json();
+
+    if (!r.ok) throw new Error(schedules.detail || 'Failed to load schedules');
+
+    container.innerHTML = '';
+
+    if (!schedules.length) {
+      container.innerHTML = '<div class="empty-state">No schedules found.</div>';
+      return;
+    }
+
+    schedules.forEach(schedule => {
+      const scheduleItem = document.createElement('div');
+      scheduleItem.className = 'schedule-item';
+      scheduleItem.id = `schedule-${schedule.id}`;
+
+      // Format dates for display
+      const formatDate = (dateString) => {
+        if (!dateString) return '—';
+        return new Date(dateString).toLocaleString();
+      };
+
+      scheduleItem.innerHTML = `
+        <div>
+          <strong>${schedule.action}</strong> • ${schedule.account_name || schedule.account_id} •
+          ${schedule.niche || '—'} • ${formatDate(schedule.start_date)} → ${formatDate(schedule.end_date)}
+          ${schedule.prompt ? `<br><small>Prompt: ${schedule.prompt}</small>` : ''}
+        </div>
+        <div class="schedule-actions">
+          <button class="edit-schedule" data-id="${schedule.id}">Edit</button>
+          <button class="delete-schedule" data-id="${schedule.id}">Delete</button>
+        </div>
+      `;
+
+      container.appendChild(scheduleItem);
+
+      // Add event listeners for edit and delete
+      scheduleItem.querySelector('.edit-schedule').addEventListener('click', () => {
+        showEditForm(schedule);
+      });
+
+      scheduleItem.querySelector('.delete-schedule').addEventListener('click', async () => {
+        if (confirm('Are you sure you want to delete this schedule?')) {
+          try {
+            await deleteSchedule(schedule.id);
+            scheduleItem.remove();
+            document.getElementById('scheduleMsg').innerHTML = '<span class="success">Schedule deleted successfully.</span>';
+          } catch (error) {
+            document.getElementById('scheduleMsg').innerHTML = `<span class="error">Error: ${error.message}</span>`;
+          }
+        }
+      });
+    });
+  } catch (error) {
+    console.error('Error loading schedules:', error);
+    container.innerHTML = `<div class="error">Failed to load schedules: ${error.message}</div>`;
+  }
+}
+
+function showEditForm(schedule) {
+  // Remove any existing edit form
+  const existingForm = document.querySelector('.edit-form');
+  if (existingForm) {
+    existingForm.remove();
+  }
+
+  const scheduleItem = document.getElementById(`schedule-${schedule.id}`);
+  const editForm = document.createElement('div');
+  editForm.className = 'edit-form';
+
+  // Format datetime for input field
+  const formatDateTime = (dateString) => {
+    if (!dateString) return '';
+    const date = new Date(dateString);
+    return date.toISOString().slice(0, 16);
+  };
+
+  editForm.innerHTML = `
+    <h5>Edit Schedule</h5>
+    <form id="editScheduleForm-${schedule.id}">
+      <label>Run At <input type="datetime-local" name="run_at" value="${formatDateTime(schedule.run_at)}" required /></label>
+      <label>Start Date <input type="date" name="start_date" value="${schedule.start_date || ''}" /></label>
+      <label>End Date <input type="date" name="end_date" value="${schedule.end_date || ''}" /></label>
+      <label>Action
+        <select name="action">
+          <option value="comment" ${schedule.action === 'comment' ? 'selected' : ''}>Comment</option>
+          <option value="post" ${schedule.action === 'post' ? 'selected' : ''}>Post</option>
+        </select>
+      </label>
+      <label>Prompt (optional) <textarea name="prompt">${schedule.prompt || ''}</textarea></label>
+      <div style="display: flex; gap: 0.5rem; margin-top: 1rem;">
+        <button type="submit" class="primary">Save Changes</button>
+        <button type="button" class="cancel-edit">Cancel</button>
+      </div>
+    </form>
+  `;
+
+  scheduleItem.after(editForm);
+
+  // Add event listeners
+  const form = document.getElementById(`editScheduleForm-${schedule.id}`);
+  form.addEventListener('submit', async (e) => {
+    e.preventDefault();
+    const formData = new FormData(form);
+    const payload = {
+      run_at: formData.get('run_at'),
+      start_date: formData.get('start_date') || null,
+      end_date: formData.get('end_date') || null,
+      action: formData.get('action'),
+      prompt: formData.get('prompt') || null
+    };
+
+    try {
+      const updatedSchedule = await updateSchedule(schedule.id, payload);
+      document.getElementById('scheduleMsg').innerHTML = '<span class="success">Schedule updated successfully.</span>';
+      editForm.remove();
+      loadSchedules(); // Reload schedules to show updated data
+    } catch (error) {
+      document.getElementById('scheduleMsg').innerHTML = `<span class="error">Error: ${error.message}</span>`;
+    }
+  });
+
+  editForm.querySelector('.cancel-edit').addEventListener('click', () => {
+    editForm.remove();
+  });
 }
 
 // --- Init ---

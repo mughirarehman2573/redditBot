@@ -4,7 +4,7 @@ from sqlalchemy.orm import Session
 from database.db import get_db
 from database.models import RedditSchedule, RedditAccount, User
 from core.jwt import get_current_user
-from schemas.schedule import ScheduleCreate
+from schemas.schedule import ScheduleCreate, ScheduleUpdate
 
 router = APIRouter(prefix="/schedule", tags=["schedule"])
 
@@ -41,3 +41,49 @@ def list_schedules(db: Session = Depends(get_db), current_user: User = Depends(g
         .filter(RedditAccount.owner_id == current_user.id)
         .all()
     )
+
+
+@router.patch("/{schedule_id}")
+def update_schedule(
+    schedule_id: int,
+    payload: ScheduleUpdate,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    sched = (
+        db.query(RedditSchedule)
+        .join(RedditAccount)
+        .filter(RedditSchedule.id == schedule_id, RedditAccount.owner_id == current_user.id)
+        .first()
+    )
+
+    if not sched:
+        raise HTTPException(status_code=404, detail="Schedule not found")
+
+    update_data = payload.dict(exclude_unset=True)
+    for key, value in update_data.items():
+        setattr(sched, key, value)
+
+    db.commit()
+    db.refresh(sched)
+    return sched
+
+@router.delete("/{schedule_id}")
+def delete_schedule(
+    schedule_id: int,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    sched = (
+        db.query(RedditSchedule)
+        .join(RedditAccount)
+        .filter(RedditSchedule.id == schedule_id, RedditAccount.owner_id == current_user.id)
+        .first()
+    )
+
+    if not sched:
+        raise HTTPException(status_code=404, detail="Schedule not found")
+
+    db.delete(sched)
+    db.commit()
+    return {"detail": "Schedule deleted successfully"}

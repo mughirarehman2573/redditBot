@@ -72,6 +72,7 @@ class RedditComment(Base):
     id: Mapped[int] = mapped_column(Integer, primary_key=True)
     account_id: Mapped[int] = mapped_column(ForeignKey("reddit_accounts.id", ondelete="CASCADE"), index=True)
     reddit_id: Mapped[str] = mapped_column(String(40), index=True, nullable=False, unique=True)
+    comment_id: Mapped[str] = mapped_column(String(40), index=True, nullable=False, unique=True)
     body: Mapped[str] = mapped_column(Text)
     created_utc: Mapped[int] = mapped_column(Integer, index=True)
 

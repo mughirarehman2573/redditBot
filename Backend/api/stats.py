@@ -14,7 +14,9 @@ def account_stats(
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user)
 ):
-    acc = db.query(RedditAccount).filter_by(id=account_id, owner_id=current_user.id).first()
+    acc = db.query(RedditAccount).filter_by(
+        id=account_id, owner_id=current_user.id
+    ).first()
     if not acc:
         return {"error": "Account not found"}
 
@@ -34,11 +36,13 @@ def account_stats(
     posts_data = [
         {
             "reddit_id": p.reddit_id,
-            "url": p.url,
+            "url": f"https://www.reddit.com/comments/{p.reddit_id}",
             "title": p.title,
             "body": p.body,
             "created_utc": p.created_utc,
-            "comment": c.body
+            "comment": c.body,
+            "comment_id": c.comment_id,
+            "comment_url": f"https://www.reddit.com/comments/{p.reddit_id}/comment/{c.comment_id}"
         }
         for p, c in posts
     ]
