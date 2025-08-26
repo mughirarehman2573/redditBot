@@ -260,14 +260,15 @@ async def process_schedule(sched, db: Session):
 
     try:
         print(f"🌐 Fetching posts from r/{account.niche}")
-
+        subreddit = normalize_subreddit(account.niche)
         potential_posts = []
         after = None
         new_count = 0
         max_new = 20
+        max_post_age_days = 30
 
         while new_count < max_new:
-            url = f"https://oauth.reddit.com/r/{account.niche}/hot?limit=10"
+            url = f"https://oauth.reddit.com/r/{subreddit}/hot?limit=10"
             if after:
                 url += f"&after={after}"
 
@@ -284,6 +285,13 @@ async def process_schedule(sched, db: Session):
             for post in posts:
                 post_data = post["data"]
                 reddit_id = post_data["id"]
+
+                post_created_utc = post_data["created_utc"]
+                post_age_days = (datetime.now() - datetime.fromtimestamp(post_created_utc)).days
+                if post_age_days > max_post_age_days:
+                    print(f"⏭️ Skipping post {reddit_id} - too old ({post_age_days} days)")
+                    continue
+
                 original_url = post_data.get('url', '')
                 print(f"🔗 Original URL from Reddit: {original_url}")
                 proper_url = get_proper_reddit_url(post_data)
@@ -397,11 +405,8 @@ async def process_schedule(sched, db: Session):
                 print(f"[{account.username}] ❌ Failed to comment on {reddit_id}")
 
         if commented_posts:
-            sched.excuted = 1
-            db.commit()
-            print(f"✅ Schedule {sched.id} marked as executed - {len(commented_posts)} comments posted")
-
             if sched.end_date and sched.end_date < datetime.now().date():
+                sched.excuted = 1
                 sched.status = "completed"
                 db.commit()
                 print(f"🏁 Schedule {sched.id} completed (end_date reached)")
@@ -519,3 +524,6 @@ def build_comment_prompt(sched: RedditSchedule, post_info: dict, account: Reddit
         url=post_info.get("url", ""),
         niche=account.niche or "",
     )
+
+def normalize_subreddit(name: str) -> str:
+    return name.lower().replace("'", "").replace(" ", "")
