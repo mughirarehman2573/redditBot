@@ -502,28 +502,50 @@ scheduler.start()
 print("✅ Async Scheduler started (run every 10m, reset daily at midnight, check completed at 1 AM)")
 
 
-
 def build_comment_prompt(sched: RedditSchedule, post_info: dict, account: RedditAccount) -> str:
-    """
-    Priority:
-    1) sched.prompt (if non-empty)
-    2) default fallback using post title + niche
-    Supports placeholders: {title}, {subreddit}, {url}, {niche}
-    """
-    fallback = (
-        "Write a short, natural, human-like Reddit comment relevant to the niche "
-        "\"{niche}\" for this post titled \"{title}\"."
-    )
-    print(sched.prompt)
-    print(post_info)
-    print(account.niche)
-    raw = (sched.prompt or "").strip() or fallback
-    return raw.format(
-        title=post_info.get("title", ""),
-        subreddit=post_info.get("subreddit", ""),
-        url=post_info.get("url", ""),
-        niche=account.niche or "",
-    )
+    title = post_info.get("title", "")
+    body = post_info.get("body", "")
+    custom_prompt = (sched.prompt or "").strip()
+    niche = account.niche or ""
 
+    if custom_prompt:
+        return f"""
+        {custom_prompt}
+
+        Here is the post you're responding to:
+
+        POST TITLE: {title}
+
+        POST CONTENT:
+        {body}
+
+        Keep your response focused on the context of {niche}.
+
+        IMPORTANT: Do not use quotation marks in your response.
+
+        Write your comment:
+        """
+    else:
+        return f"""
+        Write a helpful, empathetic, and professional comment for this Reddit post in the r/{post_info.get('subreddit', '')} subreddit.
+
+        POST TITLE: {title}
+
+        POST CONTENT:
+        {body}
+
+        Your response should be:
+        - Relevant to the specific post content
+        - Helpful and informative
+        - Professional but empathetic  
+        - Concise (1-2 sentences maximum)
+        - No emojis or quotation marks
+        - Focused on providing genuine value
+        - Stay within the context of {niche}
+
+        IMPORTANT: Do not use quotation marks in your response.
+
+        Write your comment:
+        """
 def normalize_subreddit(name: str) -> str:
     return name.lower().replace("'", "").replace(" ", "")

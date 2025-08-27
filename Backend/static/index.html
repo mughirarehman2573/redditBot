@@ -245,6 +245,15 @@
   .delete-account-btn:hover {
     background: #c82333;
   }
+  .filter-controls {
+    display: flex;
+    gap: 1rem;
+    align-items: center;
+    margin-bottom: 1rem;
+    padding: 1rem;
+    background: #f8f9fa;
+    border-radius: 8px;
+  }
 </style>
 </head>
 <body>
@@ -331,6 +340,17 @@
   <!-- Schedules -->
   <section id="view-schedule" class="card hidden">
     <h3>⏰ Manage Schedules</h3>
+
+    <!-- Filter controls -->
+    <div class="filter-controls">
+      <label>Filter by Account:
+        <select id="filterAccount">
+          <option value="">All Accounts</option>
+        </select>
+      </label>
+      <button id="applyFilterBtn" class="primary">Apply Filter</button>
+    </div>
+
     <form id="scheduleForm" style="margin-bottom:1rem;">
       <label>Reddit Account <select id="scheduleAccount"></select></label>
       <label>Run At <input type="datetime-local" id="scheduleTime" required /></label>
@@ -731,27 +751,55 @@ window.addEventListener('DOMContentLoaded',async()=>{
 });
 
 // --- Schedule ---
+let currentAccountFilter = '';
+
 async function loadScheduleAccounts(){
-  const sel=document.getElementById('scheduleAccount');sel.innerHTML='';
+  const sel = document.getElementById('scheduleAccount');
+  const filterSel = document.getElementById('filterAccount');
+
+  sel.innerHTML = '';
+  filterSel.innerHTML = '<option value="">All Accounts</option>';
+
   const API_BASE = await ensureApiBase();
-  const r=await fetch(`${API_BASE}/reddit/accounts`,{headers:{Authorization:'Bearer '+token()}});
-  const d=await r.json();d.forEach(acc=>{sel.insertAdjacentHTML('beforeend',`<option value="${acc.id}">${acc.username}</option>`);});
+  const r = await fetch(`${API_BASE}/reddit/accounts`, {headers: {Authorization: 'Bearer ' + token()}});
+  const d = await r.json();
+
+  d.forEach(acc => {
+    sel.insertAdjacentHTML('beforeend', `<option value="${acc.id}">${acc.username}</option>`);
+    filterSel.insertAdjacentHTML('beforeend', `<option value="${acc.id}">${acc.username}</option>`);
+  });
 }
-document.getElementById('scheduleForm').addEventListener('submit',async e=>{
-  e.preventDefault();const msg=document.getElementById('scheduleMsg');
-  try{
+
+// Apply filter button handler
+document.getElementById('applyFilterBtn').addEventListener('click', () => {
+  const filterSel = document.getElementById('filterAccount');
+  currentAccountFilter = filterSel.value;
+  loadSchedules();
+});
+
+document.getElementById('scheduleForm').addEventListener('submit', async e => {
+  e.preventDefault();
+  const msg = document.getElementById('scheduleMsg');
+  try {
     const API_BASE = await ensureApiBase();
-    const res=await fetch(`${API_BASE}/schedule/${document.getElementById('scheduleAccount').value}`,{
-      method:'POST',headers:{'Content-Type':'application/json','Authorization':'Bearer '+token()},
-      body:JSON.stringify({run_at:document.getElementById('scheduleTime').value,
-        start_date:document.getElementById('scheduleStartDate').value||null,
-        end_date:document.getElementById('scheduleEndDate').value||null,
-        action:document.getElementById('scheduleAction').value,
-        prompt:document.getElementById('schedulePrompt').value})});
-    const d=await res.json();
-    if(!res.ok)throw new Error(d.detail||'Failed');
-    msg.innerHTML='<span class="success">✅ Saved schedule.</span>';loadSchedules();
-  }catch(e){msg.innerHTML=`<span class="error">${e.message}</span>`;}
+    const res = await fetch(`${API_BASE}/schedule/${document.getElementById('scheduleAccount').value}`, {
+      method: 'POST',
+      headers: {'Content-Type': 'application/json', 'Authorization': 'Bearer ' + token()},
+      body: JSON.stringify({
+        run_at: document.getElementById('scheduleTime').value,
+        start_date: document.getElementById('scheduleStartDate').value || null,
+        end_date: document.getElementById('scheduleEndDate').value || null,
+        action: document.getElementById('scheduleAction').value,
+        prompt: document.getElementById('schedulePrompt').value
+      })
+    });
+    const d = await res.json();
+    if (!res.ok) throw new Error(d.detail || 'Failed');
+    msg.innerHTML = '<span class="success">✅ Saved schedule.</span>';
+    loadSchedules();
+  } catch (e) {
+    msg.innerHTML = `<span class="error">${e.message}</span>`;
+  }
 });
 
 // Update schedule function
@@ -795,13 +843,17 @@ async function deleteSchedule(scheduleId) {
   }
 }
 
-async function loadSchedules(){
+async function loadSchedules() {
   const container = document.getElementById('scheduleList');
   container.innerHTML = 'Loading schedules...';
 
   try {
-    const API_BASE = await ensureApiBase();
-    const r = await fetch(`${API_BASE}/schedule/`, {
+    let url = `${API_BASE}/schedule/`;
+    if (currentAccountFilter) {
+      url += `?account_id=${currentAccountFilter}`;
+    }
+
+    const r = await fetch(url, {
       headers: {Authorization: 'Bearer ' + token()}
     });
     const schedules = await r.json();
@@ -931,9 +983,21 @@ function showEditForm(schedule) {
   });
 }
 
-// --- Init ---
-async function initAfterLogin(){await loadModes();await refreshStats();}
-(async function boot2(){if(token()){setWho("User");show('dashboard');initAfterLogin();}else show('login');})();
+async function initAfterLogin() {
+  await loadModes();
+  await refreshStats();
+  await loadScheduleAccounts();
+}
+
+(async function boot2() {
+  if (token()) {
+    setWho("User");
+    show('dashboard');
+    initAfterLogin();
+  } else {
+    show('login');
+  }
+})();
 </script>
 </body>
 </html>

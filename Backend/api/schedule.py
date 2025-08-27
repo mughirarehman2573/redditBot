@@ -1,3 +1,5 @@
+from typing import Optional
+
 from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.orm import Session
 
@@ -34,13 +36,21 @@ def create_schedule(
 
 
 @router.get("/")
-def list_schedules(db: Session = Depends(get_db), current_user: User = Depends(get_current_user)):
-    return (
+def list_schedules(
+        account_id: Optional[int] = None,
+        db: Session = Depends(get_db),
+        current_user: User = Depends(get_current_user)
+):
+    query = (
         db.query(RedditSchedule)
         .join(RedditAccount)
         .filter(RedditAccount.owner_id == current_user.id)
-        .all()
     )
+
+    if account_id:
+        query = query.filter(RedditSchedule.account_id == account_id)
+
+    return query.all()
 
 
 @router.patch("/{schedule_id}")
