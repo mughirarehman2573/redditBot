@@ -1,15 +1,15 @@
-import json
 import os
 import random
-import requests
 import asyncio
 import time
 from datetime import datetime, timedelta
-from apscheduler.schedulers.asyncio import AsyncIOScheduler
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 from openai import OpenAI
 from dotenv import load_dotenv
+import asyncpraw
+import asyncprawcore
+import aiohttp
 
 from database.db import SessionLocal
 from database.models import RedditSchedule, RedditAccount, RedditPost, RedditComment
@@ -18,20 +18,22 @@ from api.reddit import refresh_token
 load_dotenv()
 client = OpenAI(api_key=os.getenv("OPENAI_API_KEY"))
 
-USER_AGENT = (
-    "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) "
-    "AppleWebKit/537.36 (KHTML, like Gecko) "
-    "Chrome/118.0.5993.117 Safari/537.36"
-)
-
 account_windows = {}
 assigned_hours = 0
 account_comment_trackers = {}
 last_api_call_time = 0
 MIN_API_CALL_INTERVAL = 120
+account_next_comment_time = {}
+account_post_trackers = {}
+
+
+def get_user_agent(account):
+    """Generate a custom user agent for each account"""
+    return f"golfagent by u/{account.username} v1.0"
 
 
 def get_proper_reddit_url(post_data):
+    """Extract proper Reddit URL from post data"""
     try:
         post_id = post_data.get('id', '')
         subreddit = post_data.get('subreddit', '')
@@ -52,16 +54,8 @@ def get_proper_reddit_url(post_data):
         return post_data.get('url', '')
 
 
-async def handle_rate_limit(headers, db, account):
-    if 'x-ratelimit-remaining' in headers and headers['x-ratelimit-remaining'] == '0':
-        reset_time = int(headers.get('x-ratelimit-reset', 60))
-        print(f"⏰ Rate limit exceeded. Waiting {reset_time} seconds...")
-        await asyncio.sleep(reset_time)
-        return True
-    return False
-
-
 async def enforce_api_rate_limit():
+    """Enforce minimum time between API calls"""
     global last_api_call_time
     current_time = time.time()
     time_since_last_call = current_time - last_api_call_time
@@ -74,110 +68,52 @@ async def enforce_api_rate_limit():
     last_api_call_time = time.time()
 
 
-async def post_comment_with_retry(headers, reddit_id, comment_text, db, account, max_retries=2):
+async def post_comment_with_retry_asyncpraw(reddit_client, reddit_id, comment_text, db, account, max_retries=2):
+    """Post comment with retry logic using Async PRAW"""
     for attempt in range(max_retries):
         try:
             await enforce_api_rate_limit()
 
-            res = requests.post(
-                "https://oauth.reddit.com/api/comment",
-                headers=headers,
-                data={"thing_id": f"t3_{reddit_id}", "text": comment_text},
-                timeout=15
-            )
+            submission = await reddit_client.submission(id=reddit_id)
+            comment = await submission.reply(comment_text)
 
-            print(f"Status Code: {res.status_code}")
+            print(f"✅ Comment posted successfully with Async PRAW")
+            return True, comment.id
 
-            try:
-                response_data = res.json()
-                print("JSON Response:")
-                print(json.dumps(response_data, indent=2))
-            except ValueError:
-                print("Response is not valid JSON")
-                response_data = {}
+        except asyncprawcore.exceptions.Forbidden as e:
+            print(f"❌ Forbidden error (possibly banned): {e}")
+            return False, None
 
-            if res.status_code == 200 and response_data.get('success') is False:
-                error_message = "Unknown rate limit error"
-                if 'jquery' in response_data:
-                    for item in response_data.get('jquery', []):
-                        if len(item) >= 4 and isinstance(item[3], list) and len(item[3]) > 0:
-                            if any(keyword in str(item[3][0]) for keyword in
-                                   ["Take a break", "been doing that a lot", "seconds", "minutes"]):
-                                error_message = item[3][0]
-                                break
-
-                print(f"❌ Rate limited (attempt {attempt + 1}/{max_retries}): {error_message}")
+        except asyncprawcore.exceptions.AsyncPrawcoreException as e:
+            if "RATELIMIT" in str(e).upper():
+                print(f"❌ Rate limited (attempt {attempt + 1}/{max_retries}): {e}")
 
                 wait_time = 30
-                if "5 seconds" in error_message:
+                error_msg = str(e).lower()
+                if "5 seconds" in error_msg:
                     wait_time = 30
-                elif "10 seconds" in error_message:
+                elif "10 seconds" in error_msg:
                     wait_time = 60
-                elif "30 seconds" in error_message:
+                elif "30 seconds" in error_msg:
                     wait_time = 120
-                elif "1 minute" in error_message:
+                elif "1 minute" in error_msg:
                     wait_time = 220
-                elif "2 minutes" in error_message:
+                elif "2 minutes" in error_msg:
                     wait_time = 300
-                elif "5 minutes" in error_message:
+                elif "5 minutes" in error_msg:
                     wait_time = 450
+                elif "8 minutes" in error_msg:
+                    wait_time = 480
 
                 print(f"⏰ Waiting {wait_time} seconds before retry...")
                 await asyncio.sleep(wait_time)
                 continue
-
-            if await handle_rate_limit(res.headers, db, account):
-                continue
-
-            if res.status_code == 200 and response_data.get('success', False):
-                comment_id = None
-                try:
-                    if 'json' in response_data and 'data' in response_data['json']:
-                        things = response_data['json']['data'].get('things', [])
-                        if things and 'data' in things[0]:
-                            comment_id = things[0]['data'].get('id')
-                    elif 'jquery' in response_data:
-                        for item in response_data['jquery']:
-                            if (len(item) >= 4 and isinstance(item[3], list) and
-                                    len(item[3]) > 0 and isinstance(item[3][0], list) and
-                                    len(item[3][0]) > 0 and isinstance(item[3][0][0], dict) and
-                                    'data' in item[3][0][0] and 'id' in item[3][0][0]['data']):
-                                comment_id = item[3][0][0]['data']['id']
-                                break
-                except (KeyError, IndexError, TypeError) as e:
-                    print(f"⚠️ Could not extract comment ID from response: {e}")
-                    comment_id = f"unknown_{int(time.time())}"
-
-                return True, comment_id
-
-            elif res.status_code == 429:
-                retry_after = int(res.headers.get('retry-after', 30))
-                print(f"⏰ HTTP 429 Too Many Requests. Waiting {retry_after} seconds...")
-                await asyncio.sleep(retry_after)
-                continue
-
-            elif res.status_code == 403:
-                print("❌ 403 Forbidden -可能需要刷新token或权限不足")
-                return False, None
-
-            elif res.status_code == 401:
-                print("❌ 401 Unauthorized - Token may be expired")
-                try:
-                    print("🔄 Refreshing token due to 401 error...")
-                    account = refresh_token(account, db)
-                    headers["Authorization"] = f"bearer {account.access_token}"
-                    print("✅ Token refreshed, retrying...")
-                    continue
-                except Exception as e:
-                    print("❌ Token refresh failed:", e)
-                    return False, None
-
             else:
-                print(f"❌ Comment failed with status {res.status_code}: {res.text}")
+                print(f"❌ Async PRAW API error: {e}")
                 return False, None
 
-        except requests.exceptions.RequestException as e:
-            print(f"❌ Network error (attempt {attempt + 1}/{max_retries}): {e}")
+        except Exception as e:
+            print(f"❌ Error posting comment with Async PRAW (attempt {attempt + 1}/{max_retries}): {e}")
             await asyncio.sleep(10 * (attempt + 1))
             continue
 
@@ -186,6 +122,7 @@ async def post_comment_with_retry(headers, reddit_id, comment_text, db, account,
 
 
 def can_post_more_comments(account_id):
+    """Check if account can post more comments within hourly limit"""
     now = datetime.now()
 
     if account_id not in account_comment_trackers:
@@ -200,111 +137,172 @@ def can_post_more_comments(account_id):
         tracker['count'] = 0
         tracker['hour_start'] = now.replace(minute=0, second=0, microsecond=0)
         print(f"🔄 Reset comment counter for account {account_id} for new hour")
-    if tracker['count'] >= 2:
+
+    if tracker['count'] >= 1:
         next_reset = tracker['hour_start'] + timedelta(hours=1)
         time_until_reset = next_reset - now
-        print(f"⏰ Account {account_id} reached 2 comment limit this hour. Next reset in: {time_until_reset}")
+        print(f"⏰ Account {account_id} reached 1 comment limit this hour. Next reset in: {time_until_reset}")
         return False, time_until_reset.total_seconds()
 
     return True, 0
 
 
-async def safe_reddit_api_call(url, headers, method='get', data=None):
-    await enforce_api_rate_limit()
+def can_comment_now(account_id, schedule_id):
+    """Check if this account can comment now based on random timing"""
+    now = datetime.now()
 
-    try:
-        if method == 'get':
-            res = requests.get(url, headers=headers, timeout=15)
-        else:
-            res = requests.post(url, headers=headers, data=data, timeout=15)
+    if account_id not in account_next_comment_time:
+        random_hour = random.randint(9, 21)
+        random_minute = random.randint(0, 59)
+        next_time = now.replace(hour=random_hour, minute=random_minute, second=0, microsecond=0)
 
-        res.raise_for_status()
-        return res
+        if next_time < now:
+            next_time += timedelta(days=1)
 
-    except requests.exceptions.RequestException as e:
-        print(f"❌ API call failed: {e}")
-        raise
+        account_next_comment_time[account_id] = next_time
+        print(f"⏰ Account {account_id} scheduled first comment at {next_time}")
+
+    next_comment_time = account_next_comment_time[account_id]
+
+    if now >= next_comment_time:
+        random_hours = random.uniform(1, 4)
+        next_comment_time = now + timedelta(hours=random_hours)
+        account_next_comment_time[account_id] = next_comment_time
+        print(f"⏰ Account {account_id} scheduled next comment at {next_comment_time}")
+        return True
+
+    print(f"⏰ Account {account_id} waiting until {next_comment_time} (now: {now})")
+    return False
+
+
+def get_account_age_factor(account_created_dt):
+    """Return a factor based on account age to limit activity for new accounts"""
+    account_age_days = (datetime.now() - account_created_dt).days
+
+    if account_age_days < 7:
+        return 0.3
+    elif account_age_days < 14:
+        return 0.6
+    elif account_age_days < 30:
+        return 0.8
+    else:
+        return 1.0
 
 
 async def process_schedule(sched, db: Session):
+    """Process a schedule for posting comments"""
     account = db.query(RedditAccount).get(sched.account_id)
     if not account:
-        print("⚠️ Account not found, skipping")
+        print("⚠️ Account not found or inactive, skipping")
         return
 
     local_now = datetime.now()
 
-    # Check if schedule has ended (end_date is in the past)
     if sched.end_date and sched.end_date < local_now.date():
         print(f"⏭️ Schedule ID={sched.id} has ended (end_date: {sched.end_date}), skipping")
         sched.status = "completed"
         db.commit()
         return
 
-    print(f"➡️ Processing schedule ID={sched.id} for account {account.username}")
+    # Check if account can comment based on timing
+    # if not can_comment_now(account.id, sched.id):
+    #     print(f"⏭️ Account {account.username} not scheduled to comment yet, skipping")
+    #     return
+
     can_post, wait_time = can_post_more_comments(account.id)
     if not can_post:
         print(f"⏭️ Account {account.username} has reached comment limit this hour, skipping")
         return
 
+    age_factor = get_account_age_factor(account.created_at)
+    if random.random() > age_factor:
+        print(f"⏭️ Account {account.username} is new, skipping this round for safety")
+        return
+
     if account.token_expires_at <= local_now:
         try:
             print("🔄 Refreshing token…")
-            account = refresh_token(account, db)
-            print("✅ Token refreshed")
+            result = refresh_token(account, db)
+
+            if isinstance(result, dict):
+                account.access_token = result.get('access_token')
+                account.refresh_token = result.get('refresh_token', account.refresh_token)
+                account.token_expires_at = datetime.fromtimestamp(result.get('expires_at', time.time() + 3600))
+                db.commit()
+                print("✅ Token refreshed and account updated")
+            else:
+                account = result
+                print("✅ Token refreshed")
+
         except Exception as e:
             print("❌ Refresh token failed:", e)
             return
 
-    headers = {"Authorization": f"bearer {account.access_token}", "User-Agent": USER_AGENT}
+    session = None
+    try:
+        user_agent = get_user_agent(account)
+        session = aiohttp.ClientSession(trust_env=True)
+        reddit = asyncpraw.Reddit(
+            client_id=os.getenv("REDDIT_CLIENT_ID"),
+            client_secret=os.getenv("REDDIT_CLIENT_SECRET"),
+            refresh_token=account.refresh_token,
+            user_agent=user_agent,
+            timeout=30,
+            requestor_kwargs={"session": session},
+            check_for_updates=False
+        )
+
+        me = await reddit.user.me()
+        print(f"✅ Async PRAW client initialized for {account.username} with user agent: {user_agent}")
+
+    except Exception as e:
+        print(f"❌ Failed to initialize Async PRAW client for {account.username}: {e}")
+        if session:
+            await session.close()
+        return
 
     try:
         print(f"🌐 Fetching posts from r/{account.niche}")
-        subreddit = normalize_subreddit(account.niche)
+        subreddit_name = normalize_subreddit(account.niche)
         potential_posts = []
-        after = None
         new_count = 0
-        max_new = 20
-        max_post_age_days = 30
+        max_new = 15
+        max_post_age_days = 7
 
-        while new_count < max_new:
-            url = f"https://oauth.reddit.com/r/{subreddit}/hot?limit=10"
-            if after:
-                url += f"&after={after}"
-
-            try:
-                res = await safe_reddit_api_call(url, headers, 'get')
-                data = res.json().get("data", {})
-            except Exception as e:
-                print(f"❌ Failed to fetch posts: {e}")
-                break
-
-            posts = data.get("children", [])
-            print(f"📨 Retrieved {len(posts)} posts (after={after})")
-
-            for post in posts:
-                post_data = post["data"]
-                reddit_id = post_data["id"]
-
-                post_created_utc = post_data["created_utc"]
-                post_age_days = (datetime.now() - datetime.fromtimestamp(post_created_utc)).days
-                if post_age_days > max_post_age_days:
-                    print(f"⏭️ Skipping post {reddit_id} - too old ({post_age_days} days)")
+        try:
+            subreddit = await reddit.subreddit(subreddit_name)
+            async for submission in subreddit.hot(limit=25):
+                if submission.stickied:
                     continue
 
-                original_url = post_data.get('url', '')
-                print(f"🔗 Original URL from Reddit: {original_url}")
-                proper_url = get_proper_reddit_url(post_data)
-                print(f"🔗 Proper URL to save: {proper_url}")
+                post_data = {
+                    "id": submission.id,
+                    "title": submission.title,
+                    "selftext": submission.selftext,
+                    "subreddit": str(submission.subreddit),
+                    "url": submission.url,
+                    "created_utc": submission.created_utc,
+                    "score": submission.score,
+                    "num_comments": submission.num_comments
+                }
+
+                if post_data["score"] < 5 or post_data["num_comments"] > 50:
+                    continue
+
+                post_age_days = (datetime.now() - datetime.fromtimestamp(post_data["created_utc"])).days
+                if post_age_days > max_post_age_days:
+                    print(f"⏭️ Skipping post {post_data['id']} - too old ({post_age_days} days)")
+                    continue
 
                 existing_comment = db.query(RedditComment).filter_by(
                     account_id=account.id,
-                    reddit_id=reddit_id
+                    reddit_id=post_data["id"]
                 ).first()
 
                 if not existing_comment:
+                    proper_url = get_proper_reddit_url(post_data)
                     potential_posts.append({
-                        "reddit_id": reddit_id,
+                        "reddit_id": post_data["id"],
                         "title": post_data["title"],
                         "body": post_data.get("selftext", ""),
                         "subreddit": post_data["subreddit"],
@@ -313,19 +311,17 @@ async def process_schedule(sched, db: Session):
                         "post_data": post_data
                     })
                     new_count += 1
-                    print(f"📝 Post {reddit_id} added to potential posts (new_count={new_count})")
+                    print(f"📝 Post {post_data['id']} added to potential posts (new_count={new_count})")
 
                 if new_count >= max_new:
                     break
 
-            if new_count >= max_new:
-                break
-
-            after = data.get("after")
-            if not after:
-                break
-
-            await asyncio.sleep(5)
+        except Exception as e:
+            print(f"❌ Failed to fetch posts with Async PRAW: {e}")
+            await reddit.close()
+            if session:  # ✅ ADDED
+                await session.close()
+            return
 
         print(f"📊 Finished: {new_count} potential posts found")
 
@@ -333,6 +329,8 @@ async def process_schedule(sched, db: Session):
         failed_posts = []
         comments_posted_this_run = 0
         max_comments_per_run = 1
+
+        random.shuffle(potential_posts)
 
         for post_info in potential_posts:
             can_post, _ = can_post_more_comments(account.id)
@@ -343,17 +341,26 @@ async def process_schedule(sched, db: Session):
             reddit_id = post_info["reddit_id"]
 
             base_prompt = build_comment_prompt(sched, post_info, account)
-            completion = client.chat.completions.create(
-                model="gpt-4o-mini",
-                messages=[{"role": "user", "content": base_prompt}],
-                temperature=0.9,
-            )
-            comment_text = completion.choices[0].message.content.strip()
-
-            if len(comment_text) < 10 or len(comment_text) > 500:
+            try:
+                completion = client.chat.completions.create(
+                    model="gpt-4o-mini",
+                    messages=[{"role": "user", "content": base_prompt}],
+                    temperature=0.9,
+                )
+                comment_text = completion.choices[0].message.content.strip()
+            except Exception as e:
+                print(f"❌ OpenAI API error: {e}")
                 continue
 
-            success, comment_id = await post_comment_with_retry(headers, reddit_id, comment_text, db, account)
+            if len(comment_text) < 15 or len(comment_text) > 300:
+                print(f"⚠️ Comment length invalid ({len(comment_text)} chars), skipping")
+                continue
+
+            if any(phrase in comment_text.lower() for phrase in ["i'm", "i am", "as an ai", "as a language model"]):
+                print(f"⚠️ AI-sounding comment detected, skipping")
+                continue
+
+            success, comment_id = await post_comment_with_retry_asyncpraw(reddit, reddit_id, comment_text, db, account)
 
             if success:
                 try:
@@ -391,11 +398,12 @@ async def process_schedule(sched, db: Session):
 
                     print(f"[{account.username}] ✅ Commented on {reddit_id}: {comment_text[:60]}…")
                     print(
-                        f"📊 Account {account.username} has posted {account_comment_trackers[account.id]['count']}/2 comments this hour")
+                        f"📊 Account {account.username} has posted {account_comment_trackers[account.id]['count']}/1 comments this hour")
 
-                    wait_between_comments = random.uniform(1800, 2400)
+                    wait_between_comments = random.uniform(1800, 3600)
                     print(f"⏰ Waiting {wait_between_comments / 60:.1f} minutes before next comment...")
                     await asyncio.sleep(wait_between_comments)
+
                 except IntegrityError:
                     db.rollback()
                     print(f"⚠️ Duplicate post or comment detected for {reddit_id}")
@@ -415,23 +423,41 @@ async def process_schedule(sched, db: Session):
 
         print(f"😴 Finished processing account {account.username} for this run")
 
+        await reddit.close()
+        if session:  # ✅ ADDED
+            await session.close()
+
     except Exception as e:
         print("❌ Error in process_schedule:", e)
         db.rollback()
+        try:
+            await reddit.close()
+        except Exception:
+            pass
+        if session:  # ✅ ADDED
+            await session.close()
         return
 
 
 async def run_schedules():
+    """Main function to run all schedules"""
     db: Session = SessionLocal()
     print("⚡ run_schedules triggered at", datetime.now())
     try:
         accounts = db.query(RedditAccount).join(RedditSchedule).filter(
-            RedditSchedule.status == "pending"
+            RedditSchedule.status == "pending",
         ).all()
 
         print(f"📋 Found {len(accounts)} accounts with pending schedules")
 
+        random.shuffle(accounts)
+
         for account in accounts:
+            # Check if account can comment based on timing
+            # if not can_comment_now(account.id, 0):
+            #     print(f"⏭️ Account {account.username} not scheduled to comment yet, skipping")
+            #     continue
+
             can_post, wait_time = can_post_more_comments(account.id)
             if not can_post:
                 print(f"⏭️ Account {account.username} has reached comment limit this hour, skipping")
@@ -446,8 +472,8 @@ async def run_schedules():
 
             if schedules:
                 await process_schedule(schedules[0], db)
-                wait_time = random.uniform(300, 600)
-                print(f"⏰ Waiting {wait_time/60:.1f} minutes before processing next account...")
+                wait_time = random.uniform(300, 900)
+                print(f"⏰ Waiting {wait_time / 60:.1f} minutes before processing next account...")
                 await asyncio.sleep(wait_time)
 
     except Exception as e:
@@ -457,7 +483,8 @@ async def run_schedules():
 
 
 async def reset_executed_daily():
-    global assigned_hours, account_windows, account_comment_trackers
+    """Reset daily execution counters"""
+    global assigned_hours, account_windows, account_comment_trackers, account_next_comment_time
     db: Session = SessionLocal()
     try:
         today = datetime.now().date()
@@ -470,7 +497,8 @@ async def reset_executed_daily():
         assigned_hours = 0
         account_windows = {}
         account_comment_trackers = {}
-        print("♻️ Cleared daily account windows and comment trackers")
+        account_next_comment_time = {}
+        print("♻️ Cleared daily account windows, comment trackers, and timing schedules")
     except Exception as e:
         print("❌ Error in reset_executed_daily:", e)
     finally:
@@ -478,6 +506,7 @@ async def reset_executed_daily():
 
 
 async def check_completed_schedules():
+    """Check and mark completed schedules"""
     db: Session = SessionLocal()
     try:
         today = datetime.now().date()
@@ -494,15 +523,64 @@ async def check_completed_schedules():
         db.close()
 
 
-scheduler = AsyncIOScheduler()
-scheduler.add_job(run_schedules, "interval", minutes=10)
-scheduler.add_job(reset_executed_daily, "cron", hour=0, minute=0)
-scheduler.add_job(check_completed_schedules, "cron", hour=1, minute=0)
-scheduler.start()
-print("✅ Async Scheduler started (run every 10m, reset daily at midnight, check completed at 1 AM)")
+async def simulate_human_activity():
+    """Simulate human-like activity (browsing, upvoting)"""
+    db: Session = SessionLocal()
+    try:
+        account = db.query(RedditAccount).filter(
+        ).order_by(db.func.random()).first()
+
+        if not account:
+            return
+
+        print(f"👤 Simulating human activity for {account.username}")
+
+        user_agent = get_user_agent(account)
+        session = aiohttp.ClientSession(trust_env=True)  # ✅ ADDED
+        reddit = asyncpraw.Reddit(
+            client_id=os.getenv("REDDIT_CLIENT_ID"),
+            client_secret=os.getenv("REDDIT_CLIENT_SECRET"),
+            refresh_token=account.refresh_token,
+            user_agent=user_agent,
+            timeout=30,
+            requestor_kwargs={"session": session},  # ✅ CHANGED
+            check_for_updates=False
+        )
+
+        subreddits = ["popular", "all", account.niche]
+        subreddit_name = random.choice(subreddits)
+
+        try:
+            subreddit = await reddit.subreddit(subreddit_name)
+            print(f"🌐 Browsing r/{subreddit_name} with {account.username}")
+
+            async for submission in subreddit.hot(limit=random.randint(3, 8)):
+                if random.random() < 0.2:
+                    try:
+                        await submission.upvote()
+                        print(f"⬆️ Upvoted a post in r/{subreddit_name}")
+                        await asyncio.sleep(random.uniform(1, 3))
+                    except Exception:
+                        pass
+
+                await asyncio.sleep(random.uniform(2, 8))
+
+            print(f"✅ Finished browsing with {account.username}")
+
+        except Exception as e:
+            print(f"❌ Error during human activity simulation: {e}")
+
+        await reddit.close()
+        await session.close()  # ✅ ADDED
+
+    except Exception as e:
+        print("❌ Error in simulate_human_activity:", e)
+    finally:
+        db.close()
 
 
 def build_comment_prompt(sched: RedditSchedule, post_info: dict, account: RedditAccount) -> str:
+    """Build prompt for OpenAI to generate comments"""
     title = post_info.get("title", "")
     body = post_info.get("body", "")
     custom_prompt = (sched.prompt or "").strip()
@@ -521,7 +599,11 @@ def build_comment_prompt(sched: RedditSchedule, post_info: dict, account: Reddit
 
         Keep your response focused on the context of {niche}.
 
-        IMPORTANT: Do not use quotation marks in your response.
+        IMPORTANT: 
+        - Do not use quotation marks in your response
+        - Do not mention that you're an AI or language model
+        - Keep it natural and human-like
+        - Avoid repetitive phrases
 
         Write your comment:
         """
@@ -542,10 +624,17 @@ def build_comment_prompt(sched: RedditSchedule, post_info: dict, account: Reddit
         - No emojis or quotation marks
         - Focused on providing genuine value
         - Stay within the context of {niche}
+        - Sound like a real person, not an AI
 
-        IMPORTANT: Do not use quotation marks in your response.
+        IMPORTANT: 
+        - Do not use quotation marks in the response
+        - Do not mention that you're an AI or language model
+        - Keep it natural and human-like
 
         Write your comment:
         """
+
+
 def normalize_subreddit(name: str) -> str:
+    """Normalize subreddit name"""
     return name.lower().replace("'", "").replace(" ", "")
