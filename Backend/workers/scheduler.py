@@ -121,27 +121,45 @@ async def post_comment_with_retry_asyncpraw(reddit_client, reddit_id, comment_te
     return False, None
 
 
-def can_post_more_comments(account_id):
-    """Check if account can post more comments within hourly limit"""
+def get_account_hourly_comment_limit(account_created_dt):
+    """Return hourly comment limit based on account age"""
+    account_age_days = (datetime.now() - account_created_dt).days
+
+    if account_age_days < 7:
+        return 1
+    elif account_age_days < 14:
+        return 2
+    elif account_age_days < 30:
+        return 3
+    else:
+        return 4
+
+
+def can_post_more_comments(account_id, account_created_dt):
+    """Check if account can post more comments within hourly limit based on account age"""
     now = datetime.now()
+    hourly_limit = get_account_hourly_comment_limit(account_created_dt)
 
     if account_id not in account_comment_trackers:
         account_comment_trackers[account_id] = {
             'count': 0,
-            'hour_start': now.replace(minute=0, second=0, microsecond=0)
+            'hour_start': now.replace(minute=0, second=0, microsecond=0),
+            'hourly_limit': hourly_limit
         }
 
     tracker = account_comment_trackers[account_id]
 
+    tracker['hourly_limit'] = hourly_limit
+
     if now - tracker['hour_start'] >= timedelta(hours=1):
         tracker['count'] = 0
         tracker['hour_start'] = now.replace(minute=0, second=0, microsecond=0)
-        print(f"🔄 Reset comment counter for account {account_id} for new hour")
+        print(f"🔄 Reset comment counter for account {account_id} for new hour (limit: {hourly_limit}/hour)")
 
-    if tracker['count'] >= 1:
+    if tracker['count'] >= hourly_limit:
         next_reset = tracker['hour_start'] + timedelta(hours=1)
         time_until_reset = next_reset - now
-        print(f"⏰ Account {account_id} reached 1 comment limit this hour. Next reset in: {time_until_reset}")
+        print(f"⏰ Account {account_id} reached {hourly_limit} comment limit this hour. Next reset in: {time_until_reset}")
         return False, time_until_reset.total_seconds()
 
     return True, 0
@@ -175,20 +193,6 @@ def can_comment_now(account_id, schedule_id):
     return False
 
 
-def get_account_age_factor(account_created_dt):
-    """Return a factor based on account age to limit activity for new accounts"""
-    account_age_days = (datetime.now() - account_created_dt).days
-
-    if account_age_days < 7:
-        return 0.3
-    elif account_age_days < 14:
-        return 0.6
-    elif account_age_days < 30:
-        return 0.8
-    else:
-        return 1.0
-
-
 async def process_schedule(sched, db: Session):
     """Process a schedule for posting comments"""
     account = db.query(RedditAccount).get(sched.account_id)
@@ -209,14 +213,9 @@ async def process_schedule(sched, db: Session):
     #     print(f"⏭️ Account {account.username} not scheduled to comment yet, skipping")
     #     return
 
-    can_post, wait_time = can_post_more_comments(account.id)
+    can_post, wait_time = can_post_more_comments(account.id, account.created_at)
     if not can_post:
         print(f"⏭️ Account {account.username} has reached comment limit this hour, skipping")
-        return
-
-    age_factor = get_account_age_factor(account.created_at)
-    if random.random() > age_factor:
-        print(f"⏭️ Account {account.username} is new, skipping this round for safety")
         return
 
     if account.token_expires_at <= local_now:
@@ -328,12 +327,13 @@ async def process_schedule(sched, db: Session):
         commented_posts = []
         failed_posts = []
         comments_posted_this_run = 0
-        max_comments_per_run = 1
+        hourly_limit = get_account_hourly_comment_limit(account.created_at)
+        max_comments_per_run = min(2, hourly_limit)
 
         random.shuffle(potential_posts)
 
         for post_info in potential_posts:
-            can_post, _ = can_post_more_comments(account.id)
+            can_post, _ = can_post_more_comments(account.id, account.created_at)
             if not can_post or comments_posted_this_run >= max_comments_per_run:
                 print(f"⏹️ Reached comment limit for account {account.username} this run")
                 break
@@ -392,13 +392,14 @@ async def process_schedule(sched, db: Session):
                     if account.id not in account_comment_trackers:
                         account_comment_trackers[account.id] = {
                             'count': 0,
-                            'hour_start': datetime.now().replace(minute=0, second=0, microsecond=0)
+                            'hour_start': datetime.now().replace(minute=0, second=0, microsecond=0),
+                            'hourly_limit': hourly_limit
                         }
                     account_comment_trackers[account.id]['count'] += 1
 
                     print(f"[{account.username}] ✅ Commented on {reddit_id}: {comment_text[:60]}…")
                     print(
-                        f"📊 Account {account.username} has posted {account_comment_trackers[account.id]['count']}/1 comments this hour")
+                        f"📊 Account {account.username} has posted {account_comment_trackers[account.id]['count']}/{hourly_limit} comments this hour")
 
                     wait_between_comments = random.uniform(1800, 3600)
                     print(f"⏰ Waiting {wait_between_comments / 60:.1f} minutes before next comment...")
@@ -424,7 +425,7 @@ async def process_schedule(sched, db: Session):
         print(f"😴 Finished processing account {account.username} for this run")
 
         await reddit.close()
-        if session:  # ✅ ADDED
+        if session:
             await session.close()
 
     except Exception as e:
@@ -434,7 +435,7 @@ async def process_schedule(sched, db: Session):
             await reddit.close()
         except Exception:
             pass
-        if session:  # ✅ ADDED
+        if session:
             await session.close()
         return
 
@@ -458,7 +459,7 @@ async def run_schedules():
             #     print(f"⏭️ Account {account.username} not scheduled to comment yet, skipping")
             #     continue
 
-            can_post, wait_time = can_post_more_comments(account.id)
+            can_post, wait_time = can_post_more_comments(account.id, account.created_at)
             if not can_post:
                 print(f"⏭️ Account {account.username} has reached comment limit this hour, skipping")
                 continue
@@ -536,14 +537,14 @@ async def simulate_human_activity():
         print(f"👤 Simulating human activity for {account.username}")
 
         user_agent = get_user_agent(account)
-        session = aiohttp.ClientSession(trust_env=True)  # ✅ ADDED
+        session = aiohttp.ClientSession(trust_env=True)
         reddit = asyncpraw.Reddit(
             client_id=os.getenv("REDDIT_CLIENT_ID"),
             client_secret=os.getenv("REDDIT_CLIENT_SECRET"),
             refresh_token=account.refresh_token,
             user_agent=user_agent,
             timeout=30,
-            requestor_kwargs={"session": session},  # ✅ CHANGED
+            requestor_kwargs={"session": session},
             check_for_updates=False
         )
 
@@ -571,7 +572,7 @@ async def simulate_human_activity():
             print(f"❌ Error during human activity simulation: {e}")
 
         await reddit.close()
-        await session.close()  # ✅ ADDED
+        await session.close()
 
     except Exception as e:
         print("❌ Error in simulate_human_activity:", e)
@@ -633,7 +634,6 @@ def build_comment_prompt(sched: RedditSchedule, post_info: dict, account: Reddit
 
         Write your comment:
         """
-
 
 def normalize_subreddit(name: str) -> str:
     """Normalize subreddit name"""
