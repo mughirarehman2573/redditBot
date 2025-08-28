@@ -10,6 +10,7 @@ from dotenv import load_dotenv
 import asyncpraw
 import asyncprawcore
 import aiohttp
+import threading
 
 from database.db import SessionLocal
 from database.models import RedditSchedule, RedditAccount, RedditPost, RedditComment
@@ -25,6 +26,9 @@ last_api_call_time = 0
 MIN_API_CALL_INTERVAL = 120
 account_next_comment_time = {}
 account_post_trackers = {}
+processed_posts_cache = {}
+processing_lock = threading.Lock()
+global_rate_limit_cooldown = None
 
 
 def get_user_agent(account):
@@ -54,6 +58,28 @@ def get_proper_reddit_url(post_data):
         return post_data.get('url', '')
 
 
+def is_global_cooldown_active():
+    """Check if global cooldown is active"""
+    global global_rate_limit_cooldown
+    if global_rate_limit_cooldown is None:
+        return False
+
+    time_remaining = global_rate_limit_cooldown - time.time()
+    if time_remaining > 0:
+        return True, time_remaining
+    else:
+        global_rate_limit_cooldown = None
+        return False, 0
+
+
+def set_global_cooldown(duration_hours=2):
+    """Set global cooldown for all operations"""
+    global global_rate_limit_cooldown
+    global_rate_limit_cooldown = time.time() + (duration_hours * 3600)
+    print(f"🛑 GLOBAL COOLDOWN ACTIVATED: No operations for {duration_hours} hours")
+    print(f"⏰ Cooldown ends at: {datetime.fromtimestamp(global_rate_limit_cooldown)}")
+
+
 async def enforce_api_rate_limit():
     """Enforce minimum time between API calls"""
     global last_api_call_time
@@ -75,6 +101,16 @@ async def post_comment_with_retry_asyncpraw(reddit_client, reddit_id, comment_te
             await enforce_api_rate_limit()
 
             submission = await reddit_client.submission(id=reddit_id)
+
+            existing_comment = db.query(RedditComment).filter_by(
+                account_id=account.id,
+                reddit_id=reddit_id
+            ).first()
+
+            if existing_comment:
+                print(f"⏭️ Already commented on post {reddit_id}, skipping")
+                return False, None
+
             comment = await submission.reply(comment_text)
 
             print(f"✅ Comment posted successfully with Async PRAW")
@@ -86,28 +122,10 @@ async def post_comment_with_retry_asyncpraw(reddit_client, reddit_id, comment_te
 
         except asyncprawcore.exceptions.AsyncPrawcoreException as e:
             if "RATELIMIT" in str(e).upper():
-                print(f"❌ Rate limited (attempt {attempt + 1}/{max_retries}): {e}")
+                print(f"❌ RATE LIMIT ERROR (attempt {attempt + 1}/{max_retries}): {e}")
 
-                wait_time = 30
-                error_msg = str(e).lower()
-                if "5 seconds" in error_msg:
-                    wait_time = 30
-                elif "10 seconds" in error_msg:
-                    wait_time = 60
-                elif "30 seconds" in error_msg:
-                    wait_time = 120
-                elif "1 minute" in error_msg:
-                    wait_time = 220
-                elif "2 minutes" in error_msg:
-                    wait_time = 300
-                elif "5 minutes" in error_msg:
-                    wait_time = 450
-                elif "8 minutes" in error_msg:
-                    wait_time = 480
-
-                print(f"⏰ Waiting {wait_time} seconds before retry...")
-                await asyncio.sleep(wait_time)
-                continue
+                set_global_cooldown(2)
+                return False, None
             else:
                 print(f"❌ Async PRAW API error: {e}")
                 return False, None
@@ -144,11 +162,11 @@ def can_post_more_comments(account_id, account_created_dt):
         account_comment_trackers[account_id] = {
             'count': 0,
             'hour_start': now.replace(minute=0, second=0, microsecond=0),
-            'hourly_limit': hourly_limit
+            'hourly_limit': hourly_limit,
+            'last_comment_time': None
         }
 
     tracker = account_comment_trackers[account_id]
-
     tracker['hourly_limit'] = hourly_limit
 
     if now - tracker['hour_start'] >= timedelta(hours=1):
@@ -156,45 +174,46 @@ def can_post_more_comments(account_id, account_created_dt):
         tracker['hour_start'] = now.replace(minute=0, second=0, microsecond=0)
         print(f"🔄 Reset comment counter for account {account_id} for new hour (limit: {hourly_limit}/hour)")
 
+    if tracker['last_comment_time'] and (now - tracker['last_comment_time']).total_seconds() < 3600:
+        time_until_next = 3600 - (now - tracker['last_comment_time']).total_seconds()
+        print(f"⏰ Account {account_id} already commented in last hour. Wait {time_until_next / 60:.1f} minutes")
+        return False, time_until_next
+
     if tracker['count'] >= hourly_limit:
         next_reset = tracker['hour_start'] + timedelta(hours=1)
         time_until_reset = next_reset - now
-        print(f"⏰ Account {account_id} reached {hourly_limit} comment limit this hour. Next reset in: {time_until_reset}")
+        print(
+            f"⏰ Account {account_id} reached {hourly_limit} comment limit this hour. Next reset in: {time_until_reset}")
         return False, time_until_reset.total_seconds()
 
     return True, 0
 
 
-def can_comment_now(account_id, schedule_id):
-    """Check if this account can comment now based on random timing"""
-    now = datetime.now()
+def is_post_processed(account_id, post_id):
+    """Check if this post has been processed recently for this account"""
+    cache_key = f"{account_id}_{post_id}"
+    current_time = time.time()
 
-    if account_id not in account_next_comment_time:
-        random_hour = random.randint(9, 21)
-        random_minute = random.randint(0, 59)
-        next_time = now.replace(hour=random_hour, minute=random_minute, second=0, microsecond=0)
+    for key in list(processed_posts_cache.keys()):
+        if current_time - processed_posts_cache[key] > 86400:
+            del processed_posts_cache[key]
 
-        if next_time < now:
-            next_time += timedelta(days=1)
+    return cache_key in processed_posts_cache
 
-        account_next_comment_time[account_id] = next_time
-        print(f"⏰ Account {account_id} scheduled first comment at {next_time}")
 
-    next_comment_time = account_next_comment_time[account_id]
-
-    if now >= next_comment_time:
-        random_hours = random.uniform(1, 4)
-        next_comment_time = now + timedelta(hours=random_hours)
-        account_next_comment_time[account_id] = next_comment_time
-        print(f"⏰ Account {account_id} scheduled next comment at {next_comment_time}")
-        return True
-
-    print(f"⏰ Account {account_id} waiting until {next_comment_time} (now: {now})")
-    return False
+def mark_post_processed(account_id, post_id):
+    """Mark a post as processed for this account"""
+    cache_key = f"{account_id}_{post_id}"
+    processed_posts_cache[cache_key] = time.time()
 
 
 async def process_schedule(sched, db: Session):
     """Process a schedule for posting comments"""
+    cooldown_active, time_remaining = is_global_cooldown_active()
+    if cooldown_active:
+        print(f"🛑 GLOBAL COOLDOWN ACTIVE: Skipping all operations for {time_remaining / 3600:.1f} more hours")
+        return
+
     account = db.query(RedditAccount).get(sched.account_id)
     if not account:
         print("⚠️ Account not found or inactive, skipping")
@@ -207,11 +226,6 @@ async def process_schedule(sched, db: Session):
         sched.status = "completed"
         db.commit()
         return
-
-    # Check if account can comment based on timing
-    # if not can_comment_now(account.id, sched.id):
-    #     print(f"⏭️ Account {account.username} not scheduled to comment yet, skipping")
-    #     return
 
     can_post, wait_time = can_post_more_comments(account.id, account.created_at)
     if not can_post:
@@ -238,6 +252,8 @@ async def process_schedule(sched, db: Session):
             return
 
     session = None
+    reddit = None
+
     try:
         user_agent = get_user_agent(account)
         session = aiohttp.ClientSession(trust_env=True)
@@ -271,6 +287,11 @@ async def process_schedule(sched, db: Session):
         try:
             subreddit = await reddit.subreddit(subreddit_name)
             async for submission in subreddit.hot(limit=25):
+                cooldown_active, _ = is_global_cooldown_active()
+                if cooldown_active:
+                    print("🛑 Global cooldown activated during post fetching, stopping")
+                    break
+
                 if submission.stickied:
                     continue
 
@@ -290,7 +311,9 @@ async def process_schedule(sched, db: Session):
 
                 post_age_days = (datetime.now() - datetime.fromtimestamp(post_data["created_utc"])).days
                 if post_age_days > max_post_age_days:
-                    print(f"⏭️ Skipping post {post_data['id']} - too old ({post_age_days} days)")
+                    continue
+
+                if is_post_processed(account.id, post_data["id"]):
                     continue
 
                 existing_comment = db.query(RedditComment).filter_by(
@@ -318,27 +341,38 @@ async def process_schedule(sched, db: Session):
         except Exception as e:
             print(f"❌ Failed to fetch posts with Async PRAW: {e}")
             await reddit.close()
-            if session:  # ✅ ADDED
+            if session:
                 await session.close()
             return
 
         print(f"📊 Finished: {new_count} potential posts found")
 
+        if not potential_posts:
+            print(f"⏭️ No suitable posts found for {account.username}, skipping")
+            await reddit.close()
+            if session:
+                await session.close()
+            return
+
         commented_posts = []
         failed_posts = []
         comments_posted_this_run = 0
         hourly_limit = get_account_hourly_comment_limit(account.created_at)
-        max_comments_per_run = min(2, hourly_limit)
+        max_comments_per_run = 1
 
         random.shuffle(potential_posts)
 
         for post_info in potential_posts:
-            can_post, _ = can_post_more_comments(account.id, account.created_at)
-            if not can_post or comments_posted_this_run >= max_comments_per_run:
-                print(f"⏹️ Reached comment limit for account {account.username} this run")
+            cooldown_active, _ = is_global_cooldown_active()
+            if cooldown_active:
+                print("🛑 Global cooldown activated, stopping all operations")
+                break
+
+            if comments_posted_this_run >= max_comments_per_run:
                 break
 
             reddit_id = post_info["reddit_id"]
+            mark_post_processed(account.id, reddit_id)
 
             base_prompt = build_comment_prompt(sched, post_info, account)
             try:
@@ -393,17 +427,17 @@ async def process_schedule(sched, db: Session):
                         account_comment_trackers[account.id] = {
                             'count': 0,
                             'hour_start': datetime.now().replace(minute=0, second=0, microsecond=0),
-                            'hourly_limit': hourly_limit
+                            'hourly_limit': hourly_limit,
+                            'last_comment_time': datetime.now()
                         }
                     account_comment_trackers[account.id]['count'] += 1
+                    account_comment_trackers[account.id]['last_comment_time'] = datetime.now()
 
                     print(f"[{account.username}] ✅ Commented on {reddit_id}: {comment_text[:60]}…")
                     print(
                         f"📊 Account {account.username} has posted {account_comment_trackers[account.id]['count']}/{hourly_limit} comments this hour")
 
-                    wait_between_comments = random.uniform(1800, 3600)
-                    print(f"⏰ Waiting {wait_between_comments / 60:.1f} minutes before next comment...")
-                    await asyncio.sleep(wait_between_comments)
+                    break
 
                 except IntegrityError:
                     db.rollback()
@@ -442,8 +476,18 @@ async def process_schedule(sched, db: Session):
 
 async def run_schedules():
     """Main function to run all schedules"""
+    cooldown_active, time_remaining = is_global_cooldown_active()
+    if cooldown_active:
+        print(f"🛑 GLOBAL COOLDOWN ACTIVE: Skipping run_schedules for {time_remaining / 3600:.1f} more hours")
+        return
+
+    if not processing_lock.acquire(blocking=False):
+        print("⏭️ Another schedule run is already in progress, skipping")
+        return
+
     db: Session = SessionLocal()
     print("⚡ run_schedules triggered at", datetime.now())
+
     try:
         accounts = db.query(RedditAccount).join(RedditSchedule).filter(
             RedditSchedule.status == "pending",
@@ -451,13 +495,17 @@ async def run_schedules():
 
         print(f"📋 Found {len(accounts)} accounts with pending schedules")
 
+        if not accounts:
+            print("⏭️ No accounts with pending schedules, skipping")
+            return
+
         random.shuffle(accounts)
 
         for account in accounts:
-            # Check if account can comment based on timing
-            # if not can_comment_now(account.id, 0):
-            #     print(f"⏭️ Account {account.username} not scheduled to comment yet, skipping")
-            #     continue
+            cooldown_active, _ = is_global_cooldown_active()
+            if cooldown_active:
+                print("🛑 Global cooldown activated during account processing, stopping")
+                break
 
             can_post, wait_time = can_post_more_comments(account.id, account.created_at)
             if not can_post:
@@ -473,7 +521,7 @@ async def run_schedules():
 
             if schedules:
                 await process_schedule(schedules[0], db)
-                wait_time = random.uniform(300, 900)
+                wait_time = random.uniform(300, 600)
                 print(f"⏰ Waiting {wait_time / 60:.1f} minutes before processing next account...")
                 await asyncio.sleep(wait_time)
 
@@ -481,7 +529,7 @@ async def run_schedules():
         print("❌ Error in run_schedules:", e)
     finally:
         db.close()
-
+        processing_lock.release()
 
 async def reset_executed_daily():
     """Reset daily execution counters"""
