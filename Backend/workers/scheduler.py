@@ -62,7 +62,7 @@ def is_global_cooldown_active():
     """Check if global cooldown is active"""
     global global_rate_limit_cooldown
     if global_rate_limit_cooldown is None:
-        return False
+        return False, 0
 
     time_remaining = global_rate_limit_cooldown - time.time()
     if time_remaining > 0:

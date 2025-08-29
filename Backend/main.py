@@ -47,7 +47,7 @@ def create_app() -> FastAPI:
     scheduler = AsyncIOScheduler()
 
     scheduler.add_job(run_schedules, "interval",
-                      minutes=int(os.getenv("SCHEDULER_INTERVAL_MINUTES", "30")),max_instances=5)
+                      minutes=int(os.getenv("SCHEDULER_INTERVAL_MINUTES", "3")),max_instances=5)
 
     scheduler.add_job(reset_executed_daily, "cron", hour=0, minute=0)
 
