@@ -5,374 +5,919 @@
 <meta name="viewport" content="width=device-width, initial-scale=1" />
 <title>RedditBot</title>
 <link href="https://unpkg.com/@picocss/pico@2/css/pico.min.css" rel="stylesheet">
+<link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css" rel="stylesheet">
 <style>
+  :root {
+    --primary: #667eea;
+    --primary-hover: #5a6fd8;
+    --secondary: #764ba2;
+    --success: #10b981;
+    --error: #ef4444;
+    --warning: #f59e0b;
+    --dark: #1a1a1a;
+    --dark-secondary: #2a2a2a;
+    --dark-tertiary: #3a3a3a;
+    --text-light: #e5e7eb;
+    --text-muted: #9ca3af;
+    --border: #374151;
+    --gradient-1: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+    --gradient-2: linear-gradient(135deg, #f093fb 0%, #f5576c 100%);
+    --gradient-3: linear-gradient(135deg, #4facfe 0%, #00f2fe 100%);
+    --shadow-sm: 0 1px 2px 0 rgba(0, 0, 0, 0.05);
+    --shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1), 0 2px 4px -1px rgba(0, 0, 0, 0.06);
+    --shadow-lg: 0 10px 15px -3px rgba(0, 0, 0, 0.1), 0 4px 6px -2px rgba(0, 0, 0, 0.05);
+    --shadow-xl: 0 20px 25px -5px rgba(0, 0, 0, 0.1), 0 10px 10px -5px rgba(0, 0, 0, 0.04);
+  }
+
+  * {
+    margin: 0;
+    padding: 0;
+    box-sizing: border-box;
+  }
+
   body {
-    max-width: 1200px;
-    margin: 2rem auto;
-    font-family: "Segoe UI", system-ui, sans-serif;
-    background: #fafafa;
-    color: #222;
+    font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', system-ui, sans-serif;
+    background: var(--dark);
+    color: var(--text-light);
+    min-height: 100vh;
+
   }
-  header.card {
-    background: linear-gradient(135deg, #6a11cb 0%, #2575fc 100%);
-    color: #fff;
+
+  /* Glassmorphism effect */
+  .glass {
+    background: rgba(42, 42, 42, 0.8);
+    backdrop-filter: blur(20px);
+    border: 1px solid rgba(255, 255, 255, 0.1);
   }
-  header h2 { margin: 0; }
-  nav a {
-    margin-right: .75rem;
-    color: #fff !important;
+
+  /* Header */
+  header.hero-header {
+    background: var(--gradient-1);
+    padding: 1rem 0;
+    position: relative;
+    overflow: hidden;
+  }
+
+  header.hero-header::before {
+    content: '';
+    position: absolute;
+    top: 0;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    background: url("data:image/svg+xml,%3Csvg width='60' height='60' viewBox='0 0 60 60' xmlns='http://www.w3.org/2000/svg'%3E%3Cg fill='none' fill-rule='evenodd'%3E%3Cg fill='%23ffffff' fill-opacity='0.05'%3E%3Ccircle cx='30' cy='30' r='2'/%3E%3C/g%3E%3C/g%3E%3C/svg%3E");
+    animation: float 20s ease-in-out infinite;
+  }
+
+  @keyframes float {
+    0%, 100% { transform: translateY(0px); }
+    50% { transform: translateY(-10px); }
+  }
+
+.header-container {
+  max-width: 1200px;
+  padding: 0 1rem;
+  display: flex;
+  align-items: center; /* keep vertical alignment */
+  position: relative;
+  z-index: 1;
+}
+
+  .logo {
+    display: flex;
+    align-items: center;
+    gap: 1rem;
+    font-size: 2rem;
+    font-weight: 800;
+    color: white;
+  }
+
+  .logo-icon {
+    width: 48px;
+    height: 48px;
+    background: rgba(255, 255, 255, 0.2);
+    border-radius: 12px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 24px;
+  }
+
+  /* Navigation */
+  .nav-container {
+    margin: 0 auto;
+    display: flex;
+    text-align: center;
+    align-items: center;
+    justify-content: center;
+    flex: 1;
+  }
+
+.nav-links {
+    display: flex;
+    margin: 0;
+    list-style: none;
+    flex: 1;
+    justify-content: space-evenly; /* evenly spread across full width */
+  }
+
+.nav-links li {
+    flex: 1; /* each item takes equal width */
+  }
+
+  .nav-links a {
+    color: rgba(255, 255, 255, 0.9);
+    text-decoration: none;
+    font-weight: 500;
+    padding: 0.5rem 1rem;
+    border-radius: 0;
+    transition: all 0.3s ease;
+    position: relative;
+  }
+
+  .nav-links a:hover {
+    background: rgba(255, 255, 255, 0.1);
+    transform: translateY(-2px);
+  }
+
+ .user-info {
+  display: flex;
+  align-items: center;
+  gap: 1rem;
+  margin-left: auto !important; /* push user info to right */
+}
+
+  .user-pill {
+    background: rgba(255, 255, 255, 0.15);
+    padding: 0.5rem 1rem;
+    border-radius: 20px;
+    font-size: 0.9rem;
     font-weight: 500;
   }
-  nav a:hover {
-    text-decoration: underline;
+
+  .logout-btn {
+    background: rgba(255, 255, 255, 0.1);
+    border: 1px solid rgba(255, 255, 255, 0.2);
+    color: white;
+    padding: 0.5rem 1rem;
+    border-radius: 8px;
+    font-weight: 500;
+    cursor: pointer;
+    transition: all 0.3s ease;
   }
-  .hidden { display: none; }
+
+  .logout-btn:hover {
+    background: rgba(255, 255, 255, 0.2);
+    transform: translateY(-2px);
+  }
+
+  /* Main Container */
+  .main-container {
+    max-width: 1200px;
+    margin: 0 auto;
+    padding: 2rem;
+    min-height: calc(100vh - 200px);
+  }
+
+  /* Cards */
   .card {
-    padding: 1.5rem;
-    border: 1px solid #e3e3e3;
-    border-radius: 12px;
-    margin-bottom: 1.5rem;
-    background: #fff;
-    box-shadow: 0 2px 8px rgba(0,0,0,0.05);
+    background: var(--dark-secondary);
+    border: 1px solid var(--border);
+    border-radius: 16px;
+    padding: 2rem;
+    margin-bottom: 2rem;
+    box-shadow: var(--shadow-lg);
+    position: relative;
+    overflow: hidden;
+    transition: all 0.3s ease;
   }
-  .grid-2 { display:grid; grid-template-columns: 1fr 1fr; gap: 1rem; }
-  .pill {
-    padding: .3rem .7rem;
+
+  .card:hover {
+    transform: translateY(-2px);
+    box-shadow: var(--shadow-xl);
+  }
+
+  .card.glass-card {
+    background: rgba(42, 42, 42, 0.6);
+    backdrop-filter: blur(20px);
+    border: 1px solid rgba(255, 255, 255, 0.1);
+  }
+
+  .card::before {
+    content: '';
+    position: absolute;
+    top: 0;
+    left: 0;
+    right: 0;
+    height: 3px;
+    background: var(--gradient-1);
+  }
+
+  /* Login Card */
+  .login-card {
+    max-width: 500px;
+    margin: 1rem auto;
+    height: 600px;
+    padding: 2rem;
+    background: var(--dark-secondary);
     border-radius: 20px;
-    font-size: .8rem;
-    background: #fff;
-    color: #333;
-    font-weight: 600;
+    box-shadow: var(--shadow-xl);
+    text-align: center;
+    border: 1px solid var(--border);
+    position: relative;
+    overflow: hidden;
   }
-  .success { color: #2e7d32; font-weight: 500; }
-  .error { color: #c62828; font-weight: 500; }
+
+  .login-card::before {
+    content: '';
+    position: absolute;
+    top: 0;
+    left: 0;
+    right: 0;
+    height: 4px;
+    background: var(--gradient-1);
+  }
+
+  .login-header {
+    margin-bottom: 2rem;
+  }
+
+  .login-header h3 {
+    font-size: 1.5rem;
+    font-weight: 550;
+    background: var(--gradient-1);
+    -webkit-background-clip: text;
+    -webkit-text-fill-color: transparent;
+    background-clip: text;
+    margin-bottom: 0.5rem;
+  }
+
+  .login-subtitle {
+    color: var(--text-muted);
+    font-size: 1rem;
+  }
+
+  /* Enhanced Input Groups */
+  .input-group {
+    position: relative;
+    margin-bottom: 2rem;
+  }
+
+  .input-group input {
+    width: 100%;
+    padding: 1rem 1rem 1rem 3rem;
+    background: var(--dark-tertiary);
+    border: 2px solid var(--border);
+    border-radius: 12px;
+    color: var(--text-light);
+    font-size: 1rem;
+    outline: none;
+    transition: all 0.3s ease;
+  }
+
+  .input-group input:focus {
+    border-color: var(--primary);
+    box-shadow: 0 0 0 3px rgba(102, 126, 234, 0.1);
+  }
+
+  .input-group label {
+    position: absolute;
+    left: 3rem;
+    top: 50%;
+    transform: translateY(-50%);
+    color: var(--text-muted);
+    font-size: 1rem;
+    pointer-events: none;
+    transition: 0.3s ease all;
+    background: var(--dark-tertiary);
+    padding: 0 0.5rem;
+  }
+
+  .input-group input:focus + label,
+  .input-group input:not(:placeholder-shown) + label {
+    top: -12px;
+    left: 0rem;
+    font-size: 0.9rem;
+    margin-bottom: 2rem;
+    background-color: transparent;
+    color: var(--primary);
+  }
+
+  .input-icon {
+    position: absolute;
+    left: 1rem;
+    top: 50%;
+    transform: translateY(-50%);
+    color: var(--text-muted);
+    font-size: 1.1rem;
+  }
+
+  /* Buttons */
+  .btn {
+    padding: 0.75rem 1.5rem;
+    border: none;
+    border-radius: 10px;
+    font-weight: 600;
+    font-size: 1rem;
+    cursor: pointer;
+    transition: all 0.3s ease;
+    display: inline-flex;
+    align-items: center;
+    gap: 0.5rem;
+    text-decoration: none;
+    justify-content: center;
+  }
+
+  .btn-primary {
+    background: var(--gradient-1);
+    color: white;
+    box-shadow: var(--shadow);
+  }
+
+  .btn-primary:hover {
+    transform: translateY(-2px);
+    box-shadow: var(--shadow-lg);
+  }
+
+  .btn-success {
+    background: var(--success);
+    color: white;
+  }
+
+  .btn-danger {
+    background: var(--error);
+    color: white;
+  }
+
+  .btn-secondary {
+    background: var(--dark-tertiary);
+    color: var(--text-light);
+    border: 1px solid var(--border);
+  }
+
+  .btn-full {
+    width: 100%;
+    padding: 1rem;
+    font-size: 1.1rem;
+  }
+
+  /* Stats Grid */
+  .stats-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
+    gap: 1.5rem;
+    margin-bottom: 2rem;
+  }
+
+  .stat-card {
+    background: var(--dark-secondary);
+    border: 1px solid var(--border);
+    border-radius: 16px;
+    padding: 2rem;
+    text-align: center;
+    position: relative;
+    overflow: hidden;
+    transition: all 0.3s ease;
+  }
+
+  .stat-card:hover {
+    transform: translateY(-4px);
+    box-shadow: var(--shadow-xl);
+  }
+
+  .stat-card::before {
+    content: '';
+    position: absolute;
+    top: 0;
+    left: 0;
+    right: 0;
+    height: 3px;
+    background: var(--gradient-1);
+  }
+
+  .stat-icon {
+    width: 60px;
+    height: 60px;
+    background: var(--gradient-1);
+    border-radius: 50%;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    margin: 0 auto 1rem;
+    font-size: 1.5rem;
+    color: white;
+  }
+
+  .stat-value {
+    font-size: 2.5rem;
+    font-weight: 800;
+    color: var(--text-light);
+    margin-bottom: 0.5rem;
+  }
+
+  .stat-label {
+    color: var(--text-muted);
+    font-weight: 500;
+    text-transform: uppercase;
+    font-size: 0.9rem;
+    letter-spacing: 1px;
+  }
+
+  /* Tables */
+  .table-container {
+    background: var(--dark-secondary);
+    border-radius: 16px;
+    overflow: hidden;
+    border: 1px solid var(--border);
+  }
+
   table {
     width: 100%;
     border-collapse: collapse;
-    border-radius: 8px;
-    overflow: hidden;
   }
-  table th, table td {
-    padding: .75rem;
+
+  table th {
+    background: var(--dark-tertiary);
+    padding: 1rem;
     text-align: left;
-    border-bottom: 1px solid #eee;
-  }
-  table thead {
-    background: #f5f7fa;
+    color: var(--text-light);
     font-weight: 600;
+    text-transform: uppercase;
+    font-size: 0.85rem;
+    letter-spacing: 1px;
   }
-  table tbody tr:hover {
-    background: #f9f9f9;
+
+  table td {
+    padding: 1rem;
+    border-bottom: 1px solid var(--border);
+    color: var(--text-light);
   }
-  button, input, select, textarea {
-    border-radius: 6px !important;
-  }
-  button.primary, #saveModesBtn {
-    background: #2575fc;
-    color: #fff;
-    border: none;
-    font-weight: 600;
-    cursor: pointer;
+
+  table tbody tr {
     transition: background 0.2s ease;
   }
-  button.primary:hover, #saveModesBtn:hover {
-    background: #1258d6;
+
+  table tbody tr:hover {
+    background: rgba(102, 126, 234, 0.05);
   }
-  #logoutBtn {
-    background: rgba(255,255,255,0.2);
-    border: none;
-    color: #fff;
+
+  /* Toggle Switches */
+  .toggle-group {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+    gap: 1.5rem;
+    margin-bottom: 2rem;
   }
-  #logoutBtn:hover { background: rgba(255,255,255,0.35); }
-  #scheduleList li {
-    padding: .5rem .75rem;
-    margin: .3rem 0;
-    background: #f7f9fc;
-    border: 1px solid #e3e6ed;
-    border-radius: 6px;
-  }
-  footer {
-    margin-top:2rem;
-    text-align:center;
-    color:#777;
-  }
-  h3, h5 { color: #333; }
-  .stats-details {
-    margin-top: 1rem;
-    padding: 1rem;
-    background: #f8f9fa;
-    border-radius: 8px;
-    border-left: 4px solid #2575fc;
-  }
-  .post-item, .comment-item {
-    padding: 0.75rem;
-    margin-bottom: 0.75rem;
-    background: white;
-    border-radius: 6px;
-    border: 1px solid #e9ecef;
-  }
-  .post-title {
-    font-weight: 600;
-    color: #2c3e50;
-    margin-bottom: 0.5rem;
-  }
-  .comment-body {
-    color: #34495e;
-    line-height: 1.4;
-  }
-  .timestamp {
-    font-size: 0.8rem;
-    color: #7f8c8d;
-    margin-top: 0.5rem;
-  }
-  .pagination {
+
+  .toggle-item {
     display: flex;
-    justify-content: center;
-    margin-top: 1rem;
-    gap: 0.5rem;
-  }
-  .pagination button {
-    padding: 0.5rem 1rem;
-    border: 1px solid #ddd;
-    background: white;
-    cursor: pointer;
-    border-radius: 4px;
-  }
-  .pagination button.active {
-    background: #2575fc;
-    color: white;
-    border-color: #2575fc;
-  }
-  .activity-item {
-    border: 1px solid #e0e0e0;
-    border-radius: 8px;
+    align-items: center;
+    justify-content: space-between;
     padding: 1rem;
-    margin-bottom: 1rem;
-    background: white;
+    background: var(--dark-tertiary);
+    border-radius: 12px;
+    border: 1px solid var(--border);
   }
+
+  .toggle-switch {
+    position: relative;
+    width: 60px;
+    height: 32px;
+    background: var(--border);
+    border-radius: 16px;
+    cursor: pointer;
+    transition: background 0.3s ease;
+  }
+
+  .toggle-switch input {
+    display: none;
+  }
+
+  .toggle-switch::after {
+    content: '';
+    position: absolute;
+    top: 4px;
+    left: 4px;
+    width: 24px;
+    height: 24px;
+    background: white;
+    border-radius: 50%;
+    transition: transform 0.3s ease;
+  }
+
+  .toggle-switch input:checked + .toggle-switch {
+    background: var(--primary);
+  }
+
+  .toggle-switch input:checked + .toggle-switch::after {
+    transform: translateX(28px);
+  }
+
+  /* Activity Items */
+  .activity-item {
+    background: var(--dark-secondary);
+    border: 1px solid var(--border);
+    border-radius: 12px;
+    padding: 1.5rem;
+    margin-bottom: 1rem;
+    transition: all 0.3s ease;
+  }
+
+  .activity-item:hover {
+    transform: translateX(4px);
+    border-color: var(--primary);
+  }
+
   .activity-header {
     display: flex;
     justify-content: space-between;
     align-items: flex-start;
-    margin-bottom: 0.5rem;
+    margin-bottom: 1rem;
   }
+
   .post-link {
-    color: #2575fc;
+    color: var(--primary);
     text-decoration: none;
-    font-weight: 500;
+    font-weight: 600;
+    font-size: 1.1rem;
   }
+
   .post-link:hover {
     text-decoration: underline;
   }
-  .post-content {
-    margin: 0.5rem 0;
-    color: #555;
+
+  .timestamp {
+    font-size: 0.85rem;
+    color: var(--text-muted);
+    background: var(--dark-tertiary);
+    padding: 0.25rem 0.75rem;
+    border-radius: 20px;
   }
+
   .comment-content {
-    background: #f8f9fa;
-    padding: 0.75rem;
-    border-radius: 6px;
-    border-left: 3px solid #2575fc;
-    margin-top: 0.5rem;
+    background: var(--dark-tertiary);
+    padding: 1rem;
+    border-radius: 8px;
+    border-left: 4px solid var(--primary);
+    margin-top: 1rem;
   }
-  .empty-state {
-    text-align: center;
-    padding: 2rem;
-    color: #777;
-  }
+
+  /* Pagination */
   .pagination-info {
     text-align: center;
-    margin: 1rem 0;
+    margin: 1.5rem 0;
+    color: var(--text-muted);
     font-weight: 500;
-    color: #555;
   }
+
   .pagination-controls {
     display: flex;
     justify-content: center;
     gap: 1rem;
-    margin: 1rem 0;
+    margin: 2rem 0;
   }
-  .pagination-controls button {
-    padding: 0.5rem 1rem;
-    border: 1px solid #2575fc;
-    background: white;
-    color: #2575fc;
-    cursor: pointer;
-    border-radius: 4px;
+
+  /* Messages */
+  .message {
+    padding: 1rem;
+    border-radius: 8px;
+    margin: 1rem 0;
     font-weight: 500;
   }
-  .pagination-controls button:disabled {
-    opacity: 0.5;
-    cursor: not-allowed;
+
+  .message.success {
+    background: rgba(16, 185, 129, 0.1);
+    border: 1px solid var(--success);
+    color: var(--success);
   }
-  .pagination-controls button:hover:not(:disabled) {
-    background: #2575fc;
-    color: white;
+
+  .message.error {
+    background: rgba(239, 68, 68, 0.1);
+    border: 1px solid var(--error);
+    color: var(--error);
   }
-  .schedule-item {
-    display: flex;
-    justify-content: space-between;
-    align-items: center;
-    padding: 0.75rem;
-    margin-bottom: 0.5rem;
-    background: white;
-    border-radius: 6px;
-    border: 1px solid #e9ecef;
-  }
-  .schedule-actions {
-    display: flex;
-    gap: 0.5rem;
-  }
-  .edit-form {
-    margin-top: 1rem;
-    padding: 1rem;
-    background: #f8f9fa;
-    border-radius: 6px;
-    border-left: 3px solid #2575fc;
-  }
-  .account-actions {
-    display: flex;
-    gap: 0.5rem;
-  }
-  .delete-account-btn {
-    background: #dc3545;
-    color: white;
-    border: none;
-    padding: 0.25rem 0.5rem;
-    border-radius: 4px;
-    cursor: pointer;
-  }
-  .delete-account-btn:hover {
-    background: #c82333;
-  }
+
+  /* Filter Controls */
   .filter-controls {
     display: flex;
     gap: 1rem;
     align-items: center;
-    margin-bottom: 1rem;
-    padding: 1rem;
-    background: #f8f9fa;
+    padding: 1.5rem;
+    background: var(--dark-tertiary);
+    border-radius: 12px;
+    border: 1px solid var(--border);
+    margin-bottom: 2rem;
+  }
+
+  /* Responsive */
+  @media (max-width: 768px) {
+    .header-container {
+      flex-direction: column;
+      gap: 1rem;
+      text-align: center;
+    }
+
+    .nav-links {
+      flex-wrap: wrap;
+      justify-content: center;
+    }
+
+    .main-container {
+      padding: 1rem;
+    }
+
+    .stats-grid {
+      grid-template-columns: 1fr;
+    }
+
+    .toggle-group {
+      grid-template-columns: 1fr;
+    }
+
+    .login-card {
+      margin: 2rem 1rem;
+      padding: 2rem;
+    }
+  }
+
+  /* Hidden class */
+  .hidden {
+    display: none !important;
+  }
+
+  /* Select styling */
+  select, textarea {
+    background: var(--dark-tertiary);
+    border: 2px solid var(--border);
     border-radius: 8px;
+    color: var(--text-light);
+    padding: 0.75rem;
+    font-size: 1rem;
+  }
+
+  select:focus, textarea:focus {
+    border-color: var(--primary);
+    outline: none;
+  }
+
+  /* Loading animation */
+  .loading {
+    display: inline-block;
+    width: 20px;
+    height: 20px;
+    border: 3px solid var(--border);
+    border-radius: 50%;
+    border-top-color: var(--primary);
+    animation: spin 1s ease-in-out infinite;
+  }
+
+  @keyframes spin {
+    to { transform: rotate(360deg); }
+  }
+
+  /* Empty state */
+  .empty-state {
+    text-align: center;
+    padding: 3rem 2rem;
+    color: var(--text-muted);
+  }
+
+  .empty-state i {
+    font-size: 3rem;
+    margin-bottom: 1rem;
+    opacity: 0.3;
   }
 </style>
 </head>
 <body>
 
-<header class="card">
-  <div style="display:flex;align-items:center;justify-content:space-between;">
-    <h2>RedditBot</h2>
-    <nav id="nav" class="hidden" style="display:flex;align-items:center;">
-      <a href="#" data-view="dashboard">Dashboard</a>
-      <a href="#" data-view="accounts">Accounts</a>
-      <a href="#" data-view="stats">Stats</a>
-      <a href="#" data-view="add">Add Account</a>
-      <a href="#" data-view="schedule">Schedules</a>
-      <span id="who" class="pill"></span>
-      <button id="logoutBtn">Logout</button>
+<header class="hero-header">
+  <div class="header-container">
+    <div class="logo">
+      <div class="logo-icon">
+        <i class="fab fa-reddit"></i>
+      </div>
+      <span>RedditBot</span>
+    </div>
+    <nav id="nav" class="nav-container hidden">
+      <ul class="nav-links">
+        <li><a href="#" data-view="accounts"><i class="fas fa-users"></i> Accounts</a></li>
+        <li><a href="#" data-view="stats"><i class="fas fa-chart-pie"></i> Stats</a></li>
+        <li><a href="#" data-view="add"><i class="fas fa-plus"></i> Add Account</a></li>
+        <li><a href="#" data-view="schedule"><i class="fas fa-clock"></i> Schedules</a></li>
+      </ul>
+      <div class="user-info">
+        <span id="who" class="user-pill"></span>
+        <button id="logoutBtn" class="logout-btn">
+          <i class="fas fa-sign-out-alt"></i> Logout
+        </button>
+      </div>
     </nav>
   </div>
 </header>
 
-<main>
+<div class="main-container">
   <!-- Login -->
-  <section id="view-login" class="card">
-    <h3>🔐 Admin Login</h3>
+  <section id="view-login" class="login-card">
+    <div class="login-header">
+      <h3><i class="fas fa-lock"></i> Admin Login</h3>
+      <p class="login-subtitle">Access your RedditBot dashboard</p>
+    </div>
     <form id="loginForm">
-      <div class="grid-2">
-        <label>Email <input type="email" name="email" required /></label>
-        <label>Password <input type="password" name="password" required /></label>
+      <div class="input-group">
+        <i class="input-icon fas fa-envelope"></i>
+        <input type="email" name="email" id="email" placeholder=" " required />
+        <label for="email">Email Address</label>
       </div>
-      <button type="submit" class="primary" style="width:100%;margin-top:1rem;">Login</button>
+      <div class="input-group">
+        <i class="input-icon fas fa-lock"></i>
+        <input type="password" name="password" id="password" placeholder=" " required />
+        <label for="password">Password</label>
+      </div>
+      <button type="submit" class="btn btn-primary btn-full">
+        <i class="fas fa-sign-in-alt"></i> Sign In
+      </button>
     </form>
-    <p id="loginMsg"></p>
+    <div id="loginMsg" class="message"></div>
   </section>
 
   <!-- Dashboard -->
-  <section id="view-dashboard" class="card hidden">
-    <h3>📊 Dashboard</h3>
-    <article class="card">
-      <h5>Bot Modes</h5>
-      <div class="grid-2">
-        <label><input type="checkbox" id="modeCommenting"> Enable Commenting</label>
-        <label><input type="checkbox" id="modePosting"> Enable Posting</label>
+  <section id="view-dashboard" class="hidden">
+    <div class="card glass-card">
+      <!-- <h3><i class="fas fa-chart-line"></i> Dashboard Overview</h3> -->
+      
+      <!-- <div class="stats-grid">
+        <div class="stat-card">
+          <div class="stat-icon">
+            <i class="fas fa-users"></i>
+          </div>
+          <div class="stat-value" id="statAccounts">—</div>
+          <div class="stat-label">Linked Accounts</div>
+        </div>
+        <div class="stat-card">
+          <div class="stat-icon">
+            <i class="fas fa-comments"></i>
+          </div>
+          <div class="stat-value" id="statCommenting">—</div>
+          <div class="stat-label">Commenting Status</div>
+        </div>
+        <div class="stat-card">
+          <div class="stat-icon">
+            <i class="fas fa-edit"></i>
+          </div>
+          <div class="stat-value" id="statPosting">—</div>
+          <div class="stat-label">Posting Status</div>
+        </div>
       </div>
-      <div class="grid-2" style="margin-top:1rem;">
-        <button id="saveModesBtn" class="primary">Save Modes</button>
-        <span id="modesMsg"></span>
+
+      <div class="card">
+        <h5><i class="fas fa-cogs"></i> Bot Configuration</h5>
+        <div class="toggle-group">
+          <div class="toggle-item">
+            <span><i class="fas fa-comments"></i> Enable Commenting</span>
+            <label class="toggle-switch">
+              <input type="checkbox" id="modeCommenting">
+              <div class="toggle-switch"></div>
+            </label>
+          </div>
+          <div class="toggle-item">
+            <span><i class="fas fa-edit"></i> Enable Posting</span>
+            <label class="toggle-switch">
+              <input type="checkbox" id="modePosting">
+              <div class="toggle-switch"></div>
+            </label>
+          </div>
+        </div>
+        <button id="saveModesBtn" class="btn btn-primary">
+          <i class="fas fa-save"></i> Save Configuration
+        </button>
+        <div id="modesMsg" class="message"></div>
+      </div> -->
+      
+       <h3><i class="fas fa-plus-circle"></i> Link Reddit Account</h3>
+    <div style="text-align: center; padding: 2rem;">
+      <div style="font-size: 4rem; color: var(--primary); margin-bottom: 1rem;">
+        <i class="fab fa-reddit"></i>
       </div>
-    </article>
-    <article class="card">
-      <h5>Quick Stats</h5>
-      <table>
-        <tbody>
-          <tr><td>Linked Accounts</td><td id="statAccounts">—</td></tr>
-          <tr><td>Commenting</td><td id="statCommenting">—</td></tr>
-          <tr><td>Posting</td><td id="statPosting">—</td></tr>
-        </tbody>
-      </table>
-    </article>
+      <p style="margin-bottom: 2rem; color: var(--text-muted);">
+        Connect your Reddit account to start automating posts and comments. 
+        You'll be securely redirected to Reddit's authorization page.
+      </p>
+      <button id="getAuthUrlBtn" class="btn btn-primary">
+        <i class="fab fa-reddit"></i> Connect Reddit Account
+      </button>
+    </div>
+    <div id="addMsg" class="message"></div>
+    </div>
   </section>
 
   <!-- Accounts -->
   <section id="view-accounts" class="card hidden">
-    <h3>👤 Your Reddit Accounts</h3>
-    <table>
-      <thead><tr><th>#</th><th>Username</th><th>Niche</th><th>Expires</th><th>Actions</th></tr></thead>
-      <tbody id="accountsTbody"><tr><td colspan="5">Loading…</td></tr></tbody>
-    </table>
-    <p id="accountsMsg"></p>
+    <h3><i class="fas fa-users"></i> Reddit Accounts</h3>
+    <div class="table-container">
+      <table>
+        <thead>
+          <tr>
+            <th>#</th>
+            <th><i class="fas fa-user"></i> Username</th>
+            <th><i class="fas fa-tag"></i> Niche</th>
+            <th><i class="fas fa-clock"></i> Expires</th>
+            <th><i class="fas fa-cogs"></i> Actions</th>
+          </tr>
+        </thead>
+        <tbody id="accountsTbody">
+          <tr><td colspan="5">Loading accounts...</td></tr>
+        </tbody>
+      </table>
+    </div>
+    <div id="accountsMsg" class="message"></div>
   </section>
 
   <!-- Stats -->
   <section id="view-stats" class="card hidden">
-    <h3>📈 Account Stats</h3>
-    <div id="statsContainer" style="padding:1rem;background:#f9fafc;border-radius:8px;">Loading…</div>
+    <h3><i class="fas fa-analytics"></i> Account Statistics</h3>
+    <div id="statsContainer">Loading statistics...</div>
   </section>
 
   <!-- Add -->
-  <section id="view-add" class="card hidden">
-    <h3>➕ Add Reddit Account</h3>
-    <p>Click below to open Reddit login. After completing, you'll be redirected back here automatically.</p>
-    <button id="getAuthUrlBtn" class="primary">Link Reddit Account</button>
-    <p id="addMsg"></p>
-  </section>
+  <<section id="view-add" class="card hidden">
+  <h3><i class="fas fa-plus-circle"></i> Link Reddit Account</h3>
+  <div style="text-align: center; padding: 2rem;">
+    <div style="font-size: 4rem; color: var(--primary); margin-bottom: 1rem;">
+      <i class="fab fa-reddit"></i>
+    </div>
+    <p style="margin-bottom: 2rem; color: var(--text-muted);">
+      Connect your Reddit account to start automating posts and comments.
+      You'll be securely redirected to Reddit's authorization page.
+    </p>
+    <button id="getAuthUrlBtnAdd" class="btn btn-primary">
+      <i class="fab fa-reddit"></i> Connect Reddit Account
+    </button>
+  </div>
+  <div id="addMsgAdd" class="message"></div>
+</section>
 
   <!-- Schedules -->
   <section id="view-schedule" class="card hidden">
-    <h3>⏰ Manage Schedules</h3>
+    <h3><i class="fas fa-clock"></i> Manage Schedules</h3>
 
     <!-- Filter controls -->
     <div class="filter-controls">
-      <label>Filter by Account:
+      <label>
+        <i class="fas fa-filter"></i> Filter by Account:
         <select id="filterAccount">
           <option value="">All Accounts</option>
         </select>
       </label>
-      <button id="applyFilterBtn" class="primary">Apply Filter</button>
+      <button id="applyFilterBtn" class="btn btn-primary">
+        <i class="fas fa-search"></i> Apply Filter
+      </button>
     </div>
 
-    <form id="scheduleForm" style="margin-bottom:1rem;">
-      <label>Reddit Account <select id="scheduleAccount"></select></label>
-      <label>Run At <input type="datetime-local" id="scheduleTime" required /></label>
-      <label>Start Date <input type="date" id="scheduleStartDate" /></label>
-      <label>End Date <input type="date" id="scheduleEndDate" /></label>
-      <label>Action
-        <select id="scheduleAction">
-          <option value="comment">Comment</option>
-          <option value="post">Post</option>
-        </select>
-      </label>
-      <label>Prompt (optional) <textarea id="schedulePrompt"></textarea></label>
-      <button type="submit" class="primary" style="margin-top:1rem;">Save Schedule</button>
-    </form>
-    <p id="scheduleMsg"></p>
-    <h5>Your Schedules</h5>
-    <div id="scheduleList"></div>
-  </section>
-</main>
+    <div class="card">
+      <h5><i class="fas fa-plus"></i> Create New Schedule</h5>
+      <form id="scheduleForm">
+        <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(250px, 1fr)); gap: 1rem; margin-bottom: 1rem;">
+          <label>Reddit Account 
+            <select id="scheduleAccount" required>
+              <option value="">Select Account</option>
+            </select>
+          </label>
+          <label>Run At 
+            <input type="datetime-local" id="scheduleTime" required />
+          </label>
+          <label>Start Date 
+            <input type="date" id="scheduleStartDate" />
+          </label>
+          <label>End Date 
+            <input type="date" id="scheduleEndDate" />
+          </label>
+          <label>Action
+            <select id="scheduleAction">
+              <option value="comment">Comment</option>
+              <option value="post">Post</option>
+            </select>
+          </label>
+        </div>
+        <label>Prompt (optional)
+          <textarea id="schedulePrompt" rows="3" placeholder="Enter custom prompt for this schedule..."></textarea>
+        </label>
+        <button type="submit" class="btn btn-primary" style="margin-top: 1rem;">
+          <i class="fas fa-save"></i> Create Schedule
+        </button>
+      </form>
+      <div id="scheduleMsg" class="message"></div>
+    </div>
 
-<footer>
-  <small>⚡ RedditBot • FastAPI</small>
+    <div class="card">
+      <h5><i class="fas fa-list"></i> Active Schedules</h5>
+      <div id="scheduleList">Loading schedules...</div>
+    </div>
+  </section>
+</div>
+
+<footer style="text-align: center; padding: 1.5rem; color: var(--text-muted); border-top: 1px solid var(--border);">
+  <small>⚡ RedditBot Dashboard </small>
 </footer>
 
 <script>
@@ -436,7 +981,7 @@ document.getElementById('loginForm').addEventListener('submit',async e=>{
     setWho(data.user?.email || "User");
     msg.textContent='Logged in.';
     await initAfterLogin();
-    show('dashboard');
+    show('accounts');
   }catch(err){msg.innerHTML=`<span class="error">${err.message}</span>`;}
 });
 document.getElementById('logoutBtn').addEventListener('click',()=>{
@@ -455,40 +1000,39 @@ document.querySelectorAll('nav a[data-view]').forEach(a => {
 });
 
 // --- Modes ---
-const modeCommenting=document.getElementById('modeCommenting'),
-      modePosting=document.getElementById('modePosting'),
-      modesMsg=document.getElementById('modesMsg');
-async function loadModes(){
-  try{
-    const API_BASE = await ensureApiBase();
-    const r=await fetch(`${API_BASE}/user/settings`,{headers:{Authorization:'Bearer '+token()}});
-    if(r.ok){const s=await r.json();modeCommenting.checked=!!s.commenting_enabled;modePosting.checked=!!s.posting_enabled;}
-  }catch{}
-}
-async function saveModes(){
-  modesMsg.textContent='Saving…';
-  try{
-    const API_BASE = await ensureApiBase();
-    const r=await fetch(`${API_BASE}/user/settings`,{method:'PUT',
-      headers:{'Content-Type':'application/json',Authorization:'Bearer '+token()},
-      body:JSON.stringify({commenting_enabled:modeCommenting.checked,posting_enabled:modePosting.checked})});
-    if(r.ok){modesMsg.innerHTML='<span class="success">Saved.</span>';}
-  }catch{}
-}
-document.getElementById('saveModesBtn').addEventListener('click',saveModes);
+// const modeCommenting=document.getElementById('modeCommenting'),
+//       modePosting=document.getElementById('modePosting'),
+//       modesMsg=document.getElementById('modesMsg');
+// async function loadModes(){
+//   try{
+//     const API_BASE = await ensureApiBase();
+//     if(r.ok){const s=await r.json();modeCommenting.checked=!!s.commenting_enabled;modePosting.checked=!!s.posting_enabled;}
+//   }catch{}
+// }
+// async function saveModes(){
+//   modesMsg.textContent='Saving…';
+//   try{
+//     const API_BASE = await ensureApiBase();
+//     const r=await fetch(`${API_BASE}/user/settings`,{method:'PUT',
+//       headers:{'Content-Type':'application/json',Authorization:'Bearer '+token()},
+//       body:JSON.stringify({commenting_enabled:modeCommenting.checked,posting_enabled:modePosting.checked})});
+//     if(r.ok){modesMsg.innerHTML='<span class="success">Saved.</span>';}
+//   }catch{}
+// }
+// document.getElementById('saveModesBtn').addEventListener('click',saveModes);
 
 // --- Stats ---
-async function refreshStats(){
-  let count='—';
-  try{
-    const API_BASE = await ensureApiBase();
-    const r=await fetch(`${API_BASE}/stats/accounts`,{headers:{Authorization:'Bearer '+token()}});
-  if(r.ok)count=(await r.json()).length;
-  }catch{}
-  document.getElementById('statAccounts').textContent=count;
-  document.getElementById('statCommenting').textContent=modeCommenting.checked?'On':'Off';
-  document.getElementById('statPosting').textContent=modePosting.checked?'On':'Off';
-}
+// async function refreshStats(){
+//   let count='—';
+//   try{
+//     const API_BASE = await ensureApiBase();
+//     // const r=await fetch(`${API_BASE}/stats/accounts`,{headers:{Authorization:'Bearer '+token()}});
+//   if(r.ok)count=(await r.json()).length;
+//   }catch{}
+//   document.getElementById('statAccounts').textContent=count;
+//   document.getElementById('statCommenting').textContent=modeCommenting.checked?'On':'Off';
+//   document.getElementById('statPosting').textContent=modePosting.checked?'On':'Off';
+// }
 
 // --- Delete Account Function ---
 async function deleteAccount(accountId) {
@@ -715,6 +1259,25 @@ async function getAuthUrl(){
   console.log("✅ Got auth_url:", d.auth_url);
   return d.auth_url;
 }
+
+function setupConnectButton(btnId, msgId){
+  const btn = document.getElementById(btnId);
+  if(!btn) return;
+  btn.addEventListener('click', async ()=>{
+    const msg=document.getElementById(msgId);
+    msg.textContent='Redirecting to Reddit…';
+    try{
+      const url=await getAuthUrl();
+      window.location.href=url;
+    }catch(e){
+      msg.innerHTML=`<span class="error">${e.message}</span>`;
+    }
+  });
+}
+
+setupConnectButton('getAuthUrlBtn','addMsg');
+setupConnectButton('getAuthUrlBtnAdd','addMsgAdd');
+
 document.getElementById('getAuthUrlBtn').addEventListener('click',async()=>{
   const msg=document.getElementById('addMsg');msg.textContent='Redirecting to Reddit…';
   try{
@@ -972,7 +1535,7 @@ function showEditForm(schedule) {
       const updatedSchedule = await updateSchedule(schedule.id, payload);
       document.getElementById('scheduleMsg').innerHTML = '<span class="success">Schedule updated successfully.</span>';
       editForm.remove();
-      loadSchedules(); // Reload schedules to show updated data
+      loadSchedules();
     } catch (error) {
       document.getElementById('scheduleMsg').innerHTML = `<span class="error">Error: ${error.message}</span>`;
     }
@@ -983,21 +1546,26 @@ function showEditForm(schedule) {
   });
 }
 
+
 async function initAfterLogin() {
-  await loadModes();
-  await refreshStats();
   await loadScheduleAccounts();
 }
+
 
 (async function boot2() {
   if (token()) {
     setWho("User");
-    show('dashboard');
+    show('accounts');
+    loadAccounts();
     initAfterLogin();
   } else {
     show('login');
   }
 })();
+  function togglePassword() {
+    const pwd = document.getElementById("password");
+    pwd.type = pwd.type === "password" ? "text" : "password";
+  }
 </script>
 </body>
 </html>
