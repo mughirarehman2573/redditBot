@@ -33,7 +33,11 @@ global_rate_limit_cooldown = None
 
 def get_user_agent(account):
     """Generate a custom user agent for each account"""
+<<<<<<< HEAD
     return f"nicheBot by u/{account.username} v1.0"
+=======
+    return f"golfagent by u/{account.username} v1.0"
+>>>>>>> 560bbaeb9e13ce84a3b0a31a08e907991ff7b047
 
 
 def get_proper_reddit_url(post_data):
@@ -576,7 +580,13 @@ async def simulate_human_activity():
     """Simulate human-like activity (browsing, upvoting)"""
     db: Session = SessionLocal()
     try:
+<<<<<<< HEAD
         account = db.query(RedditAccount).order_by("RANDOM()").first()
+=======
+        account = db.query(RedditAccount).filter(
+        ).order_by(db.func.random()).first()
+
+>>>>>>> 560bbaeb9e13ce84a3b0a31a08e907991ff7b047
         if not account:
             return
 
