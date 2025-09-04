@@ -120,6 +120,24 @@ def update_niche(
     return account
 
 
+@router.delete("/accounts/{account_id}")
+def delete_account(
+    account_id: int,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    account = (
+        db.query(RedditAccount)
+        .filter(RedditAccount.id == account_id, RedditAccount.owner_id == current_user.id)
+        .first()
+    )
+    if not account:
+        raise HTTPException(status_code=404, detail="Account not found")
+
+    db.delete(account)
+    db.commit()
+    return {"detail": "Account deleted successfully"}
+
 def refresh_token(account: RedditAccount, db: Session):
     auth = requests.auth.HTTPBasicAuth(REDDIT_CLIENT_ID, REDDIT_CLIENT_SECRET)
     data = {"grant_type": "refresh_token", "refresh_token": account.refresh_token}
